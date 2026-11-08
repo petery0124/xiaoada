@@ -13,6 +13,8 @@ process() { # $1 源目录 $2 目标目录 $3 最大边长
   done
 }
 process 收图/立绘 assets/looks 1536
+# 立绘缩到 840x1260，手机上够用，体积小一半
+for f in assets/looks/*.png(.N); do sips -Z 1260 "$f" >/dev/null 2>&1; done
 process 收图/贴纸 assets/stickers 600
 # 衣柜卡片用的小图
 mkdir -p assets/looks-thumb
