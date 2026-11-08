@@ -22,6 +22,22 @@ let STATS = ProcessInfo.processInfo.environment["STATS"] != nil
 guard let img = CIImage(contentsOf: inURL) else { print("cannot read \(args[1])"); exit(1) }
 let w = Int(img.extent.width), h = Int(img.extent.height), n = w * h
 
+// 如果图本身已经是透明底（比如 AI 直接给的透明 PNG），不要再抠，原样写出即可
+do {
+  let probeCtx = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
+  var probe = [UInt8](repeating: 0, count: n * 4)
+  probeCtx.render(img, toBitmap: &probe, rowBytes: w * 4, bounds: img.extent, format: .RGBA8, colorSpace: nil)
+  var transparent = 0
+  var i = 3; while i < n * 4 { if probe[i] < 128 { transparent += 1 }; i += 4 }
+  if Double(transparent) / Double(n) > 0.05 {
+    let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+    guard let cg = probeCtx.createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: cs),
+          let dest = CGImageDestinationCreateWithURL(outURL as CFURL, UTType.png.identifier as CFString, 1, nil) else { print("copy failed"); exit(7) }
+    CGImageDestinationAddImage(dest, cg, nil); CGImageDestinationFinalize(dest)
+    print("ok \(w)x\(h) already-transparent (\(Int(Double(transparent) / Double(n) * 100))% clear), copied as-is"); exit(0)
+  }
+}
+
 // ---- 1. Vision 遮罩 ----
 let handler = VNImageRequestHandler(ciImage: img, options: [:])
 let req = VNGenerateForegroundInstanceMaskRequest()

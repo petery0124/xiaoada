@@ -20,7 +20,7 @@
   const total = visibleOutfits().length;
   const KINDS = [['outfit', '穿搭'], ['bg', '背景']];
   /* ---------- 资源地址：WebP 优先；图片走最快的线路（GitHub Pages 或 jsDelivr 镜像） ---------- */
-  const ASSETS = { base: '', ver: 3, ext: 'png' };
+  const ASSETS = { base: '', ver: 4, ext: 'png' }; // 图片换了就把 ver 加一，镜像缓存才会刷新
   const CANDIDATES = ['', 'https://cdn.jsdelivr.net/gh/petery0124/xiaoada@main/', 'https://fastly.jsdelivr.net/gh/petery0124/xiaoada@main/'];
   const asset = p => ASSETS.base ? `${ASSETS.base}${p}?v=${ASSETS.ver}` : p;
   const lookSrc = id => asset(`assets/looks/${id}.${ASSETS.ext}`);
