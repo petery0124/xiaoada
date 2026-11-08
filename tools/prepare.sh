@@ -19,8 +19,9 @@ process 收图/贴纸 assets/stickers 600
 # 衣柜卡片用的小图
 mkdir -p assets/looks-thumb
 for f in assets/looks/*.png(.N); do sips -Z 360 "$f" --out "assets/looks-thumb/${f:t}" >/dev/null 2>&1; done
-# WebP 版本（页面优先加载，体积只有 PNG 的 1/7）
-for f in assets/looks/*.png(.N); do cwebp -quiet -q 82 -alpha_q 90 -m 6 "$f" -o "${f%.png}.webp"; done
-for f in assets/looks-thumb/*.png(.N); do cwebp -quiet -q 78 -m 6 "$f" -o "${f%.png}.webp"; done
+# 边缘补色 + WebP（透明通道无损、颜色 q85），页面优先加载 WebP
+for f in assets/looks/*.png(.N) assets/looks-thumb/*.png(.N); do ./tools/bleed "$f" "$f" >/dev/null; done
+for f in assets/looks/*.png(.N); do cwebp -quiet -q 85 -alpha_q 100 -exact -sharp_yuv -m 6 "$f" -o "${f%.png}.webp"; done
+for f in assets/looks-thumb/*.png(.N); do cwebp -quiet -q 82 -alpha_q 100 -exact -sharp_yuv -m 6 "$f" -o "${f%.png}.webp"; done
 rm -rf "$TMP"
 echo "完成：$(ls assets/looks | wc -l | tr -d ' ') 张立绘，$(ls assets/stickers | wc -l | tr -d ' ') 张贴纸"

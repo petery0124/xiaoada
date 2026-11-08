@@ -73,15 +73,15 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
 }
 .rays {
   position: absolute; left: 50%; top: 36%; width: 160vmax; height: 160vmax; z-index: 1; pointer-events: none;
-  transform: translate(-50%, -50%); opacity: .14; mix-blend-mode: screen;
+  transform: translate(-50%, -50%); opacity: .07; mix-blend-mode: screen;
   background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .0) 0deg 9deg, rgba(255, 240, 230, .55) 11deg 13deg, rgba(255, 255, 255, 0) 15deg 24deg);
   -webkit-mask: radial-gradient(circle, #000 0%, transparent 46%); mask: radial-gradient(circle, #000 0%, transparent 46%);
   animation: spin 70s linear infinite;
 }
 @keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
 .spot {
-  position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: screen; opacity: .55;
-  background: radial-gradient(ellipse 55% 42% at 50% 36%, var(--tone) 0%, transparent 70%);
+  position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: screen; opacity: .22;
+  background: radial-gradient(ellipse 85% 70% at 50% 40%, var(--tone) 0%, transparent 70%);
   transition: background .8s;
 }
 .fx { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; pointer-events: none; }
@@ -322,8 +322,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
     radial-gradient(90% 70% at 50% 45%, transparent 45%, rgba(255, 240, 245, .5) 100%),
     linear-gradient(to bottom, rgba(255, 255, 255, .22), transparent 30%, transparent 55%, rgba(255, 255, 255, .72) 100%);
 }
-[data-theme="princess"] .rays { opacity: .32; mix-blend-mode: overlay; background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0) 0deg 9deg, rgba(255, 220, 232, .9) 11deg 13deg, rgba(255, 255, 255, 0) 15deg 24deg); }
-[data-theme="princess"] .spot { opacity: .5; mix-blend-mode: multiply; background: radial-gradient(ellipse 60% 48% at 50% 36%, #fff 0%, var(--tone) 55%, transparent 72%); }
+[data-theme="princess"] .rays { opacity: .1; mix-blend-mode: overlay; background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0) 0deg 9deg, rgba(255, 220, 232, .9) 11deg 13deg, rgba(255, 255, 255, 0) 15deg 24deg); }
+[data-theme="princess"] .spot { opacity: .25; mix-blend-mode: screen; background: radial-gradient(ellipse 90% 75% at 50% 40%, #fff 0%, transparent 70%); }
 [data-theme="princess"] .look { filter: drop-shadow(0 16px 16px rgba(130, 60, 90, .28)); }
 [data-theme="princess"] .floor-shadow { background: radial-gradient(ellipse at center, rgba(130, 60, 90, .3) 0%, rgba(130, 60, 90, 0) 70%); }
 [data-theme="princess"] .toast, [data-theme="princess"] .chip, [data-theme="princess"] .caption {
@@ -377,6 +377,6 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
 @keyframes spin2 { to { transform: rotate(360deg); } }
 
 /* 小图占位：大图没到之前先显示 */
-.look-ph { position: absolute; inset: 0; background: center / contain no-repeat; opacity: 1; transition: opacity .5s ease .1s; filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .3)); }
+.look-ph { position: absolute; inset: 0; background: center / contain no-repeat; opacity: 1; transition: opacity .5s ease .1s; filter: blur(1.5px) drop-shadow(0 18px 18px rgba(0, 0, 0, .3)); }
 .look-inner.loaded .look-ph { opacity: 0; }
 .look-inner.loaded .look.on { position: absolute; }
