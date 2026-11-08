@@ -12,6 +12,7 @@
   const tried = new Set(store.get('tried', []));
   let unlocked = store.get('unlocked', false);
   let musicOn = store.get('music', true);
+  let theme = store.get('theme', 'theater'); // theater = 剧场版（深色）, princess = 公主风（粉嫩）
   let tab = 'outfit', posterTpl = 'mag';
 
   const byId = (kind, id) => DATA[kind].find(i => i.id === id) || DATA[kind][0];
@@ -104,10 +105,23 @@
 
   /* ---------- 八音盒背景音（Web Audio 合成，没有外部音频文件） ---------- */
   const Music = (() => {
-    let ac, master, wet, timer, next = 0, step = 0, on = false;
-    const STEP = 60 / 72 / 2; // 72 BPM 八分音符
-    const melody = [76, 79, 81, 84, 0, 81, 79, 76, 74, 76, 79, 0, 81, 79, 76, 74, 72, 76, 79, 81, 0, 84, 81, 79, 76, 74, 72, 0, 74, 76, 0, 0];
-    const bass = [60, 57, 65, 67];
+    let ac, master, wet, timer, next = 0, step = 0, on = false, track = 'theater';
+    // 两首曲子：剧场版是慢一点的八音盒；公主风是 3/4 拍的华尔兹，更暖更甜
+    const TRACKS = {
+      theater: {
+        step: 60 / 72 / 2, wet: .32, vel: .5, dur: 1.7,
+        melody: [76, 79, 81, 84, 0, 81, 79, 76, 74, 76, 79, 0, 81, 79, 76, 74, 72, 76, 79, 81, 0, 84, 81, 79, 76, 74, 72, 0, 74, 76, 0, 0],
+        bass: [60, 57, 65, 67], bassEvery: 8,
+        partials: [[1, 1, 1], [2, .32, .45], [3.01, .1, .1]],
+      },
+      princess: {
+        step: 60 / 92 / 2, wet: .42, vel: .44, dur: 2.0, barLen: 6,
+        melody: [76, 79, 84, 79, 76, 79, 74, 79, 83, 79, 74, 0, 72, 76, 81, 76, 72, 76, 81, 77, 72, 77, 81, 0,
+          76, 79, 84, 79, 76, 79, 74, 79, 83, 79, 74, 0, 72, 76, 81, 76, 72, 76, 77, 79, 84, 0, 0, 0],
+        chords: [[60, 67, 64], [55, 62, 59], [57, 64, 60], [53, 60, 57], [60, 67, 64], [55, 62, 59], [57, 64, 60], [53, 60, 57]],
+        partials: [[1, 1, 1], [2, .22, .5], [4, .06, .12]],
+      },
+    };
     const f = m => 440 * Math.pow(2, (m - 69) / 12);
     function ensure() {
       if (ac) return;
@@ -117,27 +131,44 @@
       for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
       conv.buffer = buf; wet = ac.createGain(); wet.gain.value = .32; master.connect(conv); conv.connect(wet); wet.connect(ac.destination);
     }
-    function note(freq, t, vel, dur) {
-      const parts = [[1, 1, dur], [2, .32, dur * .45], [3.01, .1, .18]];
-      for (const [mul, g, d] of parts) {
-        const o = ac.createOscillator(), e = ac.createGain();
+    function note(freq, t, vel, dur, partials) {
+      for (const [mul, g, dk] of partials) {
+        const o = ac.createOscillator(), e = ac.createGain(); const d = Math.max(.12, dur * dk);
         o.type = 'sine'; o.frequency.value = freq * mul;
         e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(vel * g, t + .005); e.gain.exponentialRampToValueAtTime(.0006, t + d);
         o.connect(e); e.connect(master); o.start(t); o.stop(t + d + .05);
       }
     }
     function tick() {
+      const T = TRACKS[track];
       while (next < ac.currentTime + .5) {
-        const i = step % melody.length;
-        const m = melody[i];
-        if (m) note(f(m + (Math.random() < .08 ? 12 : 0)), next, .5 + Math.random() * .2, 1.7);
-        if (i % 8 === 0) note(f(bass[(step / 8 | 0) % bass.length]), next, .3, 2.6);
-        next += STEP; step++;
+        const i = step % T.melody.length, m = T.melody[i];
+        if (m) note(f(m + (Math.random() < .08 ? 12 : 0)), next, T.vel + Math.random() * .15, T.dur, T.partials);
+        if (T.chords) { // 华尔兹：咚-嚓-嚓
+          const bar = (step / T.barLen | 0) % T.chords.length, pos = step % T.barLen, ch = T.chords[bar];
+          if (pos === 0) note(f(ch[0]), next, .34, 2.4, T.partials);
+          else if (pos === 2 || pos === 4) { note(f(ch[1]), next, .12, .9, T.partials); note(f(ch[2]), next, .1, .9, T.partials); }
+        } else if (i % T.bassEvery === 0) {
+          note(f(T.bass[(step / T.bassEvery | 0) % T.bass.length]), next, .3, 2.6, T.partials);
+        }
+        next += T.step; step++;
       }
     }
     return {
-      start() { ensure(); ac.resume(); on = true; next = Math.max(next, ac.currentTime + .1); master.gain.cancelScheduledValues(ac.currentTime); master.gain.linearRampToValueAtTime(.24, ac.currentTime + 1.2); clearInterval(timer); timer = setInterval(tick, 120); tick(); },
+      start() {
+        ensure(); ac.resume(); on = true; wet.gain.value = TRACKS[track].wet;
+        next = Math.max(next, ac.currentTime + .1); master.gain.cancelScheduledValues(ac.currentTime); master.gain.linearRampToValueAtTime(.24, ac.currentTime + 1.2);
+        clearInterval(timer); timer = setInterval(tick, 120); tick();
+      },
       stop() { if (!ac) return; on = false; clearInterval(timer); master.gain.cancelScheduledValues(ac.currentTime); master.gain.linearRampToValueAtTime(0, ac.currentTime + .6); },
+      setTrack(name) {
+        if (!TRACKS[name] || name === track) return;
+        track = name; step = 0;
+        if (on && ac) { // 淡出再从头进新曲
+          clearInterval(timer); master.gain.cancelScheduledValues(ac.currentTime); master.gain.linearRampToValueAtTime(0, ac.currentTime + .5);
+          setTimeout(() => { if (on) { next = ac.currentTime + .1; wet.gain.value = TRACKS[track].wet; master.gain.linearRampToValueAtTime(.24, ac.currentTime + 1); timer = setInterval(tick, 120); tick(); } }, 550);
+        }
+      },
       get on() { return on; },
     };
   })();
@@ -323,24 +354,27 @@
     const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
     const idx = DATA.outfit.findIndex(x => x.id === o.id) + 1;
     if (posterTpl === 'mag') {
+      const P = theme === 'princess'
+        ? { bg: '#fbeef2', veil0: 'rgba(251,238,242,.2)', veil1: 'rgba(251,238,242,.9)', title: '#d9748f', sub: '#e48aa6', text: '#5b474d', side: 'rgba(91,71,77,.8)', line: 'rgba(217,116,143,.45)', shadow: 'rgba(130,60,90,.3)' }
+        : { bg: '#17111a', veil0: 'rgba(23,17,26,.15)', veil1: 'rgba(23,17,26,.85)', title: '#f5dcc8', sub: '#e7bfa8', text: 'rgba(246,238,233,.9)', side: 'rgba(246,238,233,.85)', line: 'rgba(245,220,200,.5)', shadow: 'rgba(0,0,0,.45)' };
       const Wp = 1080, Hp = 1620; cv.width = Wp; cv.height = Hp;
-      ctx.fillStyle = '#17111a'; ctx.fillRect(0, 0, Wp, Hp);
+      ctx.fillStyle = P.bg; ctx.fillRect(0, 0, Wp, Hp);
       await drawScene(ctx, Wp, Hp, bg, .6);
-      let g = ctx.createLinearGradient(0, 0, 0, Hp); g.addColorStop(0, 'rgba(23,17,26,.15)'); g.addColorStop(.6, 'rgba(23,17,26,.05)'); g.addColorStop(1, 'rgba(23,17,26,.85)');
+      let g = ctx.createLinearGradient(0, 0, 0, Hp); g.addColorStop(0, P.veil0); g.addColorStop(.6, P.veil0); g.addColorStop(1, P.veil1);
       ctx.fillStyle = g; ctx.fillRect(0, 0, Wp, Hp);
       // 刊名
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = '#f5dcc8'; ctx.font = `500 200px ${FONT_SERIF}`; spaced(ctx, DATA.name, Wp / 2, 300, 30);
-      ctx.fillStyle = '#e7bfa8'; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, 'DRESS-UP ROOM  ·  ÉDITION PRIVÉE', Wp / 2, 352, 6);
+      ctx.fillStyle = P.title; ctx.font = `500 200px ${FONT_SERIF}`; spaced(ctx, DATA.name, Wp / 2, 300, 30);
+      ctx.fillStyle = P.sub; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, 'DRESS-UP ROOM  ·  ÉDITION PRIVÉE', Wp / 2, 352, 6);
       // 人物
-      if (look) { const h = 1160, w = h * 2 / 3; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26; ctx.drawImage(look, (Wp - w) / 2, 1425 - h, w, h); ctx.restore(); }
+      if (look) { const h = 1160, w = h * 2 / 3; ctx.save(); ctx.shadowColor = P.shadow; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26; ctx.drawImage(look, (Wp - w) / 2, 1425 - h, w, h); ctx.restore(); }
       // 侧边竖排
-      ctx.save(); ctx.translate(74, 760); ctx.rotate(-Math.PI / 2); ctx.fillStyle = 'rgba(246,238,233,.85)'; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `VOL. ${String(idx).padStart(2, '0')}   ${(o.en || '').toUpperCase()}`, 0, 0, 5); ctx.restore();
-      ctx.save(); ctx.translate(1016, 760); ctx.rotate(Math.PI / 2); ctx.fillStyle = 'rgba(246,238,233,.85)'; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `衣柜试穿  ${Math.min(tried.size, total)} / ${total}`, 0, 0, 6); ctx.restore();
+      ctx.save(); ctx.translate(74, 760); ctx.rotate(-Math.PI / 2); ctx.fillStyle = P.side; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `VOL. ${String(idx).padStart(2, '0')}   ${(o.en || '').toUpperCase()}`, 0, 0, 5); ctx.restore();
+      ctx.save(); ctx.translate(1016, 760); ctx.rotate(Math.PI / 2); ctx.fillStyle = P.side; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `衣柜试穿  ${Math.min(tried.size, total)} / ${total}`, 0, 0, 6); ctx.restore();
       // 底部文案
-      ctx.fillStyle = 'rgba(245,220,200,.5)'; ctx.fillRect(90, 1448, Wp - 180, 1);
-      ctx.fillStyle = '#f5dcc8'; ctx.font = `500 46px ${FONT_SERIF}`; spaced(ctx, o.name, Wp / 2, 1512, 8);
-      ctx.fillStyle = 'rgba(246,238,233,.9)'; ctx.font = `400 30px ${FONT_SANS}`; ctx.fillText(o.line, Wp / 2, 1566);
+      ctx.fillStyle = P.line; ctx.fillRect(90, 1448, Wp - 180, 1);
+      ctx.fillStyle = P.title; ctx.font = `500 46px ${FONT_SERIF}`; spaced(ctx, o.name, Wp / 2, 1512, 8);
+      ctx.fillStyle = P.text; ctx.font = `400 30px ${FONT_SANS}`; ctx.fillText(o.line, Wp / 2, 1566);
     } else {
       const Wp = 1080, Hp = 1400; cv.width = Wp; cv.height = Hp;
       ctx.fillStyle = '#f7f1ea'; ctx.fillRect(0, 0, Wp, Hp);
@@ -360,7 +394,22 @@
     $('#poster').classList.remove('hidden');
   }
 
+  /* ---------- 皮肤 ---------- */
+  function applyTheme(t, announce) {
+    theme = t; store.set('theme', t); document.documentElement.dataset.theme = t;
+    $('#skinName').textContent = t === 'princess' ? '公主风' : '剧场版';
+    $('#skinIcon').setAttribute('href', t === 'princess' ? '#i-crown' : '#i-theater');
+    Music.setTrack(t);
+    if (announce) {
+      toast(t === 'princess' ? '已换上公主风 ♛' : '已换上剧场版 ✦', 2000);
+      const r = $('#lookBox').getBoundingClientRect(), s = $('#stage').getBoundingClientRect();
+      FX.burst(r.left - s.left + r.width / 2, r.top - s.top + r.height * .4, 34);
+      const sw = $('#sweep'); sw.classList.remove('run'); void sw.offsetWidth; sw.classList.add('run');
+    }
+  }
+
   /* ---------- 事件 ---------- */
+  $('#btnSkin').addEventListener('click', () => applyTheme(theme === 'princess' ? 'theater' : 'princess', true));
   $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; tab = b.dataset.k; renderTabs(); renderItems(); });
   $('#items').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (!b) return; pick(tab, b.dataset.id); });
   $('#btnRandom').addEventListener('click', randomize);
@@ -425,6 +474,7 @@
     ids.forEach(id => { const im = new Image(); im.onload = im.onerror = () => { done++; $('#loadBar').style.width = (done / ids.length * 100) + '%'; }; im.src = lookSrc(id); });
   })();
 
+  applyTheme(theme, false);
   renderTabs(); renderItems(); render(false);
   caption(byId('outfit', state.outfit));
 })();

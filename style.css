@@ -296,3 +296,74 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
 @media (prefers-reduced-motion: reduce) {
   .rays, .look-box, .floor-shadow, .icon-btn.playing { animation: none !important; }
 }
+
+/* ---------- 皮肤：公主风 ---------- */
+.chip-skin { left: 14px; bottom: 86px; }
+[data-theme="princess"] {
+  --bg: #fff6f2; --bg2: #fff0f4; --ink: #5b474d; --muted: #a3909a;
+  --gold: #e48aa6; --gold2: #c9607f; --rose: #f4a7bd;
+  --line: rgba(201, 96, 127, .18); --glass: rgba(255, 255, 255, .72);
+}
+[data-theme="princess"] body { background: var(--bg); }
+[data-theme="princess"] .grain { opacity: .045; }
+[data-theme="princess"] #app {
+  background:
+    radial-gradient(70% 45% at 10% 0%, #ffe3ec 0%, transparent 70%),
+    radial-gradient(60% 50% at 100% 100%, #fff0e1 0%, transparent 70%),
+    linear-gradient(180deg, #fff6f2, #fff1f5);
+}
+[data-theme="princess"] .brand-name::before { content: "♛ "; color: var(--gold); font-size: 15px; }
+[data-theme="princess"] .icon-btn { box-shadow: 0 6px 18px rgba(201, 96, 127, .12); }
+[data-theme="princess"] .icon-btn.playing { background: rgba(228, 138, 166, .2); box-shadow: 0 0 0 1px rgba(228, 138, 166, .4), 0 0 18px rgba(228, 138, 166, .3); }
+[data-theme="princess"] .stage { background: #fde8ee; box-shadow: 0 24px 50px rgba(160, 80, 110, .18), inset 0 1px 0 rgba(255, 255, 255, .8); border-color: rgba(255, 255, 255, .8); }
+[data-theme="princess"] .bg-layer { filter: blur(22px) saturate(1.15) brightness(1.03); }
+[data-theme="princess"] .stage::before {
+  background:
+    radial-gradient(90% 70% at 50% 45%, transparent 45%, rgba(255, 240, 245, .5) 100%),
+    linear-gradient(to bottom, rgba(255, 255, 255, .22), transparent 30%, transparent 55%, rgba(255, 255, 255, .72) 100%);
+}
+[data-theme="princess"] .rays { opacity: .32; mix-blend-mode: overlay; background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0) 0deg 9deg, rgba(255, 220, 232, .9) 11deg 13deg, rgba(255, 255, 255, 0) 15deg 24deg); }
+[data-theme="princess"] .spot { opacity: .5; mix-blend-mode: multiply; background: radial-gradient(ellipse 60% 48% at 50% 36%, #fff 0%, var(--tone) 55%, transparent 72%); }
+[data-theme="princess"] .look { filter: drop-shadow(0 16px 16px rgba(130, 60, 90, .28)); }
+[data-theme="princess"] .floor-shadow { background: radial-gradient(ellipse at center, rgba(130, 60, 90, .3) 0%, rgba(130, 60, 90, 0) 70%); }
+[data-theme="princess"] .toast, [data-theme="princess"] .chip, [data-theme="princess"] .caption {
+  background: rgba(255, 255, 255, .84); border-color: rgba(201, 96, 127, .18); color: var(--ink); box-shadow: 0 8px 22px rgba(160, 80, 110, .14);
+}
+[data-theme="princess"] .toast, [data-theme="princess"] .chip { color: var(--gold2); }
+[data-theme="princess"] .chip:active { background: rgba(228, 138, 166, .25); }
+[data-theme="princess"] .ring-bg { fill: rgba(255, 255, 255, .8); stroke: rgba(201, 96, 127, .18); }
+[data-theme="princess"] .cap-name::before { content: "✿ "; color: var(--gold); font-size: 13px; }
+[data-theme="princess"] .card { background: linear-gradient(180deg, #ffffff, #fff4f7); box-shadow: 0 8px 20px rgba(160, 80, 110, .1); }
+[data-theme="princess"] .card.active { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(228, 138, 166, .35), 0 14px 30px rgba(228, 138, 166, .3); }
+[data-theme="princess"] .card img { filter: drop-shadow(0 8px 10px rgba(130, 60, 90, .2)); }
+[data-theme="princess"] .card .tick, [data-theme="princess"] .bk .tick { background: var(--gold); color: #fff; }
+[data-theme="princess"] .card .badge { background: var(--gold); color: #fff; }
+[data-theme="princess"] .card.locked img, [data-theme="princess"] .bk.locked img { filter: blur(6px) brightness(1.05) opacity(.55); }
+[data-theme="princess"] .scene i { box-shadow: 0 8px 18px rgba(160, 80, 110, .2); border-color: #fff; }
+[data-theme="princess"] .overlay { background: rgba(120, 60, 90, .32); }
+[data-theme="princess"] .sheet.dark { background: linear-gradient(180deg, #ffffff, #fff5f8); border-color: rgba(201, 96, 127, .18); color: var(--ink); box-shadow: 0 30px 70px rgba(120, 50, 80, .25); }
+[data-theme="princess"] .close { background: #f7e9ee; }
+[data-theme="princess"] .seg { background: rgba(201, 96, 127, .08); border-color: rgba(201, 96, 127, .15); }
+[data-theme="princess"] .seg button.active { background: var(--gold); color: #fff; }
+[data-theme="princess"] .pill { background: linear-gradient(135deg, #f4a7bd, #e48aa6); color: #fff; box-shadow: 0 10px 24px rgba(228, 138, 166, .4); }
+[data-theme="princess"] .cmp { background: #fde8ee; }
+[data-theme="princess"] .cmp-handle, [data-theme="princess"] .cmp-handle i { background: var(--gold); }
+[data-theme="princess"] .cmp-handle i::before { color: #fff; }
+[data-theme="princess"] .cmp-tag { background: rgba(255, 255, 255, .85); color: var(--gold2); }
+[data-theme="princess"] .bk { background: #fff; }
+[data-theme="princess"] .bk.todo img { filter: grayscale(.5) opacity(.55); }
+[data-theme="princess"] .intro {
+  background:
+    radial-gradient(70% 50% at 20% 10%, #ffe3ec 0%, transparent 70%),
+    radial-gradient(60% 50% at 90% 90%, #ffeedd 0%, transparent 70%),
+    #fff6f2;
+}
+[data-theme="princess"] .intro-glow { background: radial-gradient(circle, rgba(244, 167, 189, .45) 0%, transparent 60%); }
+[data-theme="princess"] .intro-title::before { content: "♛"; display: block; text-align: center; font-size: 22px; color: var(--gold); margin-bottom: 6px; letter-spacing: 0; }
+[data-theme="princess"] .closet { background: #f7d9e1; box-shadow: 0 0 0 1.5px rgba(228, 138, 166, .6), 0 0 60px rgba(244, 167, 189, .35), 0 30px 60px rgba(160, 80, 110, .3); }
+[data-theme="princess"] .closet-inside { background: radial-gradient(70% 60% at 50% 40%, #fff6f9 0%, #ffe4ec 100%); box-shadow: inset 0 0 40px rgba(228, 138, 166, .25); }
+[data-theme="princess"] .closet-inside::before { background: radial-gradient(60% 50% at 50% 35%, rgba(255, 255, 255, .9) 0%, transparent 70%); }
+[data-theme="princess"] .door { background: linear-gradient(180deg, #fbe6ec, #f4c9d6); border-color: #fff; }
+[data-theme="princess"] .door::after { border-color: rgba(228, 138, 166, .45); }
+[data-theme="princess"] .knob { background: #e48aa6; box-shadow: 0 0 10px rgba(228, 138, 166, .6); }
+[data-theme="princess"] .intro-load { background: rgba(201, 96, 127, .15); }
