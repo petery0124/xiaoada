@@ -62,7 +62,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
 .bg { position: absolute; inset: -14%; transform: translate(calc(var(--px) * -14px), calc(var(--py) * -10px)); transition: transform .6s cubic-bezier(.2, .7, .2, 1); }
 .bg-layer {
   position: absolute; inset: 0; background-size: cover; background-position: center;
-  filter: blur(22px) saturate(1.15) brightness(.78); opacity: 0; transition: opacity .8s ease;
+  filter: blur(12px) saturate(1.15) brightness(.78); opacity: 0; transition: opacity .8s ease;
 }
 .bg-layer.show { opacity: 1; }
 .stage::before {
@@ -316,7 +316,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
 [data-theme="princess"] .icon-btn { box-shadow: 0 6px 18px rgba(201, 96, 127, .12); }
 [data-theme="princess"] .icon-btn.playing { background: rgba(228, 138, 166, .2); box-shadow: 0 0 0 1px rgba(228, 138, 166, .4), 0 0 18px rgba(228, 138, 166, .3); }
 [data-theme="princess"] .stage { background: #fde8ee; box-shadow: 0 24px 50px rgba(160, 80, 110, .18), inset 0 1px 0 rgba(255, 255, 255, .8); border-color: rgba(255, 255, 255, .8); }
-[data-theme="princess"] .bg-layer { filter: blur(22px) saturate(1.15) brightness(1.03); }
+[data-theme="princess"] .bg-layer { filter: blur(12px) saturate(1.15) brightness(1.03); }
 [data-theme="princess"] .stage::before {
   background:
     radial-gradient(90% 70% at 50% 45%, transparent 45%, rgba(255, 240, 245, .5) 100%),
@@ -375,3 +375,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
   animation: spin2 .9s linear infinite;
 }
 @keyframes spin2 { to { transform: rotate(360deg); } }
+
+/* 小图占位：大图没到之前先显示 */
+.look-ph { position: absolute; inset: 0; background: center / contain no-repeat; opacity: 1; transition: opacity .5s ease .1s; filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .3)); }
+.look-inner.loaded .look-ph { opacity: 0; }
+.look-inner.loaded .look.on { position: absolute; }

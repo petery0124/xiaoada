@@ -19,9 +19,20 @@
   const visibleOutfits = () => DATA.outfit.filter(o => !o.hidden);
   const total = visibleOutfits().length;
   const KINDS = [['outfit', '穿搭'], ['bg', '背景']];
-  const lookSrc = id => `assets/looks/${id}.png`;
-  const thumbSrc = id => `assets/looks-thumb/${id}.png`;
-  const loadImg = src => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+  /* ---------- 资源地址：WebP 优先；图片走最快的线路（GitHub Pages 或 jsDelivr 镜像） ---------- */
+  const ASSETS = { base: '', ver: 3, ext: 'png' };
+  const CANDIDATES = ['', 'https://cdn.jsdelivr.net/gh/petery0124/xiaoada@main/', 'https://fastly.jsdelivr.net/gh/petery0124/xiaoada@main/'];
+  const asset = p => ASSETS.base ? `${ASSETS.base}${p}?v=${ASSETS.ver}` : p;
+  const lookSrc = id => asset(`assets/looks/${id}.${ASSETS.ext}`);
+  const thumbSrc = id => asset(`assets/looks-thumb/${id}.${ASSETS.ext}`);
+  const loadImg = src => new Promise((res, rej) => { const im = new Image(); if (/^https?:/.test(src)) im.crossOrigin = 'anonymous'; im.onload = () => res(im); im.onerror = rej; im.src = src; });
+  const webpTest = new Promise(res => { const im = new Image(); im.onload = () => res(im.width > 0); im.onerror = () => res(false); im.src = 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA'; });
+  // 三条线路同时下一张 3KB 的小图，谁先到用谁；1.5 秒都没结果就用本站
+  const raceOrigins = () => new Promise(res => {
+    let done = false; const finish = b => { if (!done) { done = true; res(b); } };
+    setTimeout(() => finish(''), 1500);
+    CANDIDATES.forEach(b => { const im = new Image(); im.onload = () => finish(b); im.src = `${b}assets/bg/cat.jpg?p=1`; });
+  });
 
   /* ---------- 粒子特效（canvas） ---------- */
   const FX = (() => {
@@ -178,7 +189,7 @@
   function setBg(bg) {
     const layers = [$('#bgA'), $('#bgB')];
     const show = layers[bgFlip ? 1 : 0], hide = layers[bgFlip ? 0 : 1]; bgFlip = !bgFlip;
-    show.style.backgroundImage = bg.img ? `url(assets/bg/${bg.img}.jpg)` : 'linear-gradient(160deg,#5a3f4a,#3a2a36)';
+    show.style.backgroundImage = bg.img ? `url(${asset(`assets/bg/${bg.img}.jpg`)})` : 'linear-gradient(160deg,#5a3f4a,#3a2a36)';
     show.classList.add('show'); hide.classList.remove('show');
     $('#stage').style.setProperty('--tone', bg.tone || '#f6b9c9');
     FX.setTheme(bg.fx || 'sparkle');
@@ -188,9 +199,11 @@
     const cur = a.classList.contains('on') ? a : b, nxt = cur === a ? b : a;
     const src = lookSrc(id);
     if (cur.getAttribute('src') === src) return;
-    const box = $('#lookBox'); box.classList.add('loading');
+    const box = $('#lookBox'), inner = $('#lookInner'); box.classList.add('loading');
+    // 先用 10KB 的小图占位，大图到了再淡入
+    $('#lookPh').style.backgroundImage = `url(${thumbSrc(id)})`; inner.classList.remove('loaded');
     const show = () => {
-      box.classList.remove('loading'); preload();
+      box.classList.remove('loading'); inner.classList.add('loaded'); preload();
       nxt.classList.add('on'); cur.classList.remove('on');
       if (withFx && !reduced) {
         const inner = $('#lookInner'); inner.classList.remove('fxing'); void inner.offsetWidth; inner.classList.add('fxing');
@@ -244,7 +257,7 @@
       }).join('');
     } else {
       el.innerHTML = DATA.bg.map(b => `<button class="scene ${state.bg === b.id ? 'active' : ''}" data-id="${b.id}">
-        <i style="background-image:${b.img ? `url(assets/thumb/${b.img}.jpg)` : 'linear-gradient(160deg,#5a3f4a,#3a2a36)'}"></i><span>${b.name}</span></button>`).join('');
+        <i style="background-image:${b.img ? `url(${asset(`assets/thumb/${b.img}.jpg`)})` : 'linear-gradient(160deg,#5a3f4a,#3a2a36)'}"></i><span>${b.name}</span></button>`).join('');
     }
     const act = el.querySelector('.active'); if (act) act.scrollIntoView({ inline: 'center', block: 'nearest' });
   }
@@ -314,7 +327,7 @@
   }
   function openCompare() {
     const o = byId('outfit', state.outfit);
-    $('#cmpLook').src = lookSrc(o.id); $('#cmpPhoto').src = `assets/photo/${o.photo}.jpg`;
+    $('#cmpLook').src = lookSrc(o.id); $('#cmpPhoto').src = asset(`assets/photo/${o.photo}.jpg`);
     setCmp(50); $('#compare').classList.remove('hidden');
   }
   function setCmp(pct) {
@@ -343,7 +356,7 @@
   async function drawScene(ctx, Wp, Hp, bg, alpha) {
     if (bg.img) {
       try {
-        const im = await loadImg(`assets/bg/${bg.img}.jpg`); const s = Math.max(Wp / im.width, Hp / im.height) * 1.25;
+        const im = await loadImg(asset(`assets/bg/${bg.img}.jpg`)); const s = Math.max(Wp / im.width, Hp / im.height) * 1.25;
         ctx.save(); ctx.globalAlpha = alpha; if ('filter' in ctx) ctx.filter = 'blur(46px) saturate(1.15)';
         ctx.drawImage(im, (Wp - im.width * s) / 2, (Hp - im.height * s) / 2, im.width * s, im.height * s); ctx.restore();
       } catch (e) { }
@@ -481,6 +494,11 @@
   }
 
   applyTheme(theme, false);
-  renderTabs(); renderItems(); render(false);
-  caption(byId('outfit', state.outfit));
+  renderTabs(); caption(byId('outfit', state.outfit));
+  (async () => {
+    const [webp, base] = await Promise.all([webpTest, raceOrigins()]);
+    ASSETS.ext = webp ? 'webp' : 'png'; ASSETS.base = base;
+    const ci = $('#closetImg'); if (ci) ci.src = thumbSrc('base'); // 开场页可能已经被点掉了
+    renderItems(); render(false);
+  })();
 })();
