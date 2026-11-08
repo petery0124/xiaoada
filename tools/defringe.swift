@@ -24,58 +24,115 @@ for i in 0..<n {
   if A > 0 { r[i] = min(255, Int(pm[i * 4]) * 255 / A); g[i] = min(255, Int(pm[i * 4 + 1]) * 255 / A); b[i] = min(255, Int(pm[i * 4 + 2]) * 255 / A) }
 }
 @inline(__always) func lum(_ i: Int) -> Double { 0.299 * Double(r[i]) + 0.587 * Double(g[i]) + 0.114 * Double(b[i]) }
-let OUT = 32          // alpha 低于这个算"外面"
+let OUT = 64          // alpha 低于这个算"外面"（缝隙里的半透明白雾也算）
 @inline(__always) func idx(_ x: Int, _ y: Int) -> Int { y * w + x }
 var changed = 0, removed = 0
-// 两轮：第一轮去掉最外圈，第二轮处理露出来的下一圈
-for pass in 0..<3 {
+@inline(__always) func lumRGB(_ rr: Int, _ gg: Int, _ bb: Int) -> Double { 0.299 * Double(rr) + 0.587 * Double(gg) + 0.114 * Double(bb) }
+// 三轮：每轮找出边缘带（离透明区 1~3px，或本身半透明），颜色改成最近的"实心像素"的颜色；
+// 比那个实心像素亮出多少，就当掺了多少白，按比例降低透明度
+for _ in 0..<3 {
   var outside = [Bool](repeating: false, count: n)
   for i in 0..<n { outside[i] = al[i] < OUT }
-  // 到外面的距离（1、2、3 像素），用三次膨胀算
-  var dist = [UInt8](repeating: 0, count: n)   // 0 = 不在边缘带
+  var dist = [UInt8](repeating: 0, count: n)
   var cur = outside
   for d in 1...3 {
     var nxt = cur
     for y in 0..<h { for x in 0..<w {
       let i = idx(x, y); if cur[i] { continue }
       var touch = false
-      for dy in -1...1 where !touch { for dx in -1...1 {
+      outer: for dy in -1...1 { for dx in -1...1 {
         let nx = x + dx, ny = y + dy
         if nx < 0 || ny < 0 || nx >= w || ny >= h { continue }
-        if cur[idx(nx, ny)] { touch = true; break }
+        if cur[idx(nx, ny)] { touch = true; break outer }
       } }
       if touch { nxt[i] = true; if dist[i] == 0 { dist[i] = UInt8(d) } }
     } }
     cur = nxt
   }
+  // 实心像素：不透明且不在边缘带里。从它们出发向外一层层传颜色（多源 BFS），得到每个边缘像素最近的实心色
+  var srcOf = [Int32](repeating: -1, count: n)
+  var frontier = [Int]()
+  for i in 0..<n where !outside[i] && dist[i] == 0 && al[i] >= 250 {
+    srcOf[i] = Int32(i)
+    let x = i % w, y = i / w
+    if (x > 0 && srcOf[i - 1] < 0 && !outside[i - 1]) || (x < w - 1 && !outside[i + 1]) || (y > 0 && !outside[i - w]) || (y < h - 1 && !outside[i + w]) { frontier.append(i) }
+  }
+  var steps = 0
+  while !frontier.isEmpty && steps < 8 {
+    steps += 1; var next = [Int]()
+    for i in frontier {
+      let x = i % w, y = i / w
+      for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)] {
+        let nx = x + dx, ny = y + dy
+        if nx < 0 || ny < 0 || nx >= w || ny >= h { continue }
+        let j = idx(nx, ny)
+        if outside[j] || srcOf[j] >= 0 { continue }
+        srcOf[j] = srcOf[i]; next.append(j)
+      }
+    }
+    frontier = next
+  }
   var nr = r, ng = g, nb = b, na = al
   for i in 0..<n where !outside[i] && (dist[i] > 0 || al[i] < 250) {
-    let x = i % w, y = i / w
-    // 内侧参考色：9x9 里不在边缘带的不透明像素，取亮度偏暗的那四分之一位置（避免被旁边的白衣服拉高）
-    var lums = [(Double, Int)]()
-    for dy in -4...4 { for dx in -4...4 {
-      let nx = x + dx, ny = y + dy
-      if nx < 0 || ny < 0 || nx >= w || ny >= h { continue }
-      let j = idx(nx, ny)
-      if dist[j] == 0 && !outside[j] && al[j] >= 250 { lums.append((lum(j), j)) }
-    } }
-    if lums.count < 3 { continue }
-    lums.sort { $0.0 < $1.0 }
-    let q = lums[lums.count / 4]  // 25% 分位
-    let j = q.1, lref = q.0, lp = lum(i)
+    let sj = Int(srcOf[i]); if sj < 0 || sj == i { continue }
+    let lref = lum(sj), lp = lum(i)
     var f = (lp - lref) / max(1, 255 - lref)
     let weight: Double = dist[i] == 1 || al[i] < 250 ? 1.0 : (dist[i] == 2 ? 0.8 : 0.5)
-    f = min(1, f) * weight
-    if f < 0.06 { continue }
-    nr[i] = r[j]; ng[i] = g[j]; nb[i] = b[j]
-    let newA = Int(Double(al[i]) * (1 - f))
-    na[i] = newA < 16 ? 0 : newA
-    changed += 1; if na[i] == 0 { removed += 1 }
+    f = max(0, min(1, f)) * weight
+    nr[i] = r[sj]; ng[i] = g[sj]; nb[i] = b[sj]
+    if f >= 0.06 {
+      let newA = Int(Double(al[i]) * (1 - f)); na[i] = newA < 16 ? 0 : newA
+      changed += 1; if na[i] == 0 { removed += 1 }
+    }
   }
   r = nr; g = ng; b = nb; al = na
-  _ = pass
 }
-// 最外圈柔化半个像素：alpha 取自己和 3x3 最小值的平均
+// 整个轮廓向内收一个像素（3x3 取最小 alpha），把最外圈那层像素整体去掉
+do {
+  var na = al
+  for y in 0..<h { for x in 0..<w {
+    let i = idx(x, y); if al[i] == 0 { continue }
+    var m = al[i]
+    for dy in -1...1 { for dx in -1...1 {
+      let nx = x + dx, ny = y + dy
+      if nx < 0 || ny < 0 || nx >= w || ny >= h { m = 0; continue }
+      m = min(m, al[idx(nx, ny)])
+    } }
+    na[i] = m
+  } }
+  al = na
+}
+// 收完之后新露出来的边缘，颜色再继承一次实心色
+do {
+  var outside = [Bool](repeating: false, count: n)
+  for i in 0..<n { outside[i] = al[i] < OUT }
+  var srcOf = [Int32](repeating: -1, count: n); var frontier = [Int]()
+  for i in 0..<n where !outside[i] && al[i] >= 250 {
+    let x = i % w, y = i / w; var edge = false
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+      let nx = x + dx, ny = y + dy
+      if nx < 0 || ny < 0 || nx >= w || ny >= h { continue }
+      let j = idx(nx, ny); if outside[j] || al[j] < 250 { edge = true }
+    }
+    if !edge { srcOf[i] = Int32(i); frontier.append(i) }
+  }
+  var steps = 0
+  while !frontier.isEmpty && steps < 6 {
+    steps += 1; var next = [Int]()
+    for i in frontier {
+      let x = i % w, y = i / w
+      for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)] {
+        let nx = x + dx, ny = y + dy
+        if nx < 0 || ny < 0 || nx >= w || ny >= h { continue }
+        let j = idx(nx, ny); if outside[j] || srcOf[j] >= 0 { continue }
+        srcOf[j] = srcOf[i]; next.append(j)
+      }
+    }
+    frontier = next
+  }
+  for i in 0..<n where !outside[i] { let sj = Int(srcOf[i]); if sj >= 0 && sj != i { r[i] = r[sj]; g[i] = g[sj]; b[i] = b[sj] } }
+}
+// 再柔化半个像素，边缘不发硬
 do {
   var na = al
   for y in 0..<h { for x in 0..<w {
@@ -86,16 +143,7 @@ do {
       if nx < 0 || ny < 0 || nx >= w || ny >= h { continue }
       m = min(m, al[idx(nx, ny)])
     } }
-    if m == al[i] { continue }
-    // 看这个边缘像素是不是比周围（3x3 里更不透明的点）亮
-    var lsum = 0.0, lc = 0.0
-    for dy in -1...1 { for dx in -1...1 {
-      let nx = x + dx, ny = y + dy
-      if nx < 0 || ny < 0 || nx >= w || ny >= h { continue }
-      let j = idx(nx, ny); if j != i && al[j] > al[i] { lsum += lum(j); lc += 1 }
-    } }
-    let lighter = lc > 0 && lum(i) > lsum / lc + 18
-    na[i] = lighter ? m : (al[i] + m) / 2
+    na[i] = (al[i] + m) / 2
   } }
   al = na
 }
