@@ -24,7 +24,7 @@
   const accList = () => (DATA.acc || []).filter(a => stickers[a.id]);
   const kinds = () => [['outfit', '穿搭'], ...(accList().length ? [['acc', '配饰']] : []), ['bg', '背景']];
   /* ---------- 资源地址：WebP 优先；图片走最快的线路（GitHub Pages 或 jsDelivr 镜像） ---------- */
-  const ASSETS = { base: '', ver: 5, ext: 'png' }; // 图片换了就把 ver 加一，镜像缓存才会刷新
+  const ASSETS = { base: '', ver: 6, ext: 'png' }; // 图片换了就把 ver 加一，镜像缓存才会刷新
   const CANDIDATES = ['', 'https://cdn.jsdelivr.net/gh/petery0124/xiaoada@main/', 'https://fastly.jsdelivr.net/gh/petery0124/xiaoada@main/'];
   const asset = p => ASSETS.base ? `${ASSETS.base}${p}?v=${ASSETS.ver}` : p;
   const lookSrc = id => asset(`assets/looks/${id}.${ASSETS.ext}`);

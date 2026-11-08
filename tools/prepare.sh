@@ -9,7 +9,7 @@ process() { # $1 源目录 $2 目标目录 $3 最大边长
     name="${f:t:r}"; ext="${f:e:l}"
     case "$ext" in png|jpg|jpeg|webp|heic) ;; *) continue ;; esac
     sips -s format png -Z "$3" "$f" --out "$TMP/$name.png" >/dev/null 2>&1 || { echo "跳过 $f（读不了）"; continue; }
-    if ./tools/cutout "$TMP/$name.png" "$2/$name.png" >/dev/null; then echo "✓ $2/$name.png"; else echo "✗ $name 抠图失败"; fi
+    if ./tools/cutout "$TMP/$name.png" "$2/$name.png" >/dev/null; then ./tools/defringe "$2/$name.png" "$2/$name.png" >/dev/null; echo "✓ $2/$name.png"; else echo "✗ $name 抠图失败"; fi
   done
 }
 process 收图/立绘 assets/looks 1536

@@ -18,7 +18,16 @@ window.DATA = {
   // pos 是相对人物图框的百分比：x、y 是贴纸中心，w 是宽度。链接后加 ?debug=1 可以拖动、滚轮缩放来校准
   // 参考位置：头顶 5%，头宽 17%（x 41~58），脖子 24%，手掌 53%（左手 x29 / 右手 x70），腰 36%，脚底 97%
   acc: [
-    // { id: 'catears', name: '猫耳发箍', line: '灵魂配件，没有之一。', pos: { x: 49.5, y: 7.5, w: 22 } },
+    { id: 'catears', name: '猫耳发箍', en: 'Cat Ears', line: '灵魂配件，没有之一。', pos: { x: 50, y: 9.5, w: 30 } },
+    { id: 'tiara', name: '小皇冠', en: 'Tiara', line: '今天是公主。', pos: { x: 50, y: 7.5, w: 15 } },
+    { id: 'duck', name: '小鸭帽', en: 'Duck Hat', line: '嘎。', pos: { x: 50, y: 6.5, w: 27 } },
+    { id: 'pandahat', name: '熊猫帽', en: 'Panda Hat', line: '成都纪念款。', pos: { x: 50, y: 9, w: 31 } },
+    { id: 'strawbag', name: '草莓包', en: 'Strawberry Bag', line: '装得下口红和一整个夏天。', pos: { x: 60, y: 40, w: 26 } },
+    { id: 'teddyphone', name: '小熊手机', en: 'Teddy Phone', line: '手机壳也要毛茸茸。', pos: { x: 29, y: 54, w: 14 } },
+    { id: 'bouquet', name: '玫瑰花束', en: 'Bouquet', line: '生日那天的花。', pos: { x: 66, y: 56, w: 30 } },
+    { id: 'pizza', name: '披萨', en: 'Pizza', line: '皇冠配披萨，灵魂的另一半。', pos: { x: 27, y: 56, w: 20 } },
+    { id: 'cocktail', name: '橙色饮料', en: 'Cocktail', line: '氛围感道具。', pos: { x: 70, y: 53, w: 12 } },
+    { id: 'cat', name: '小猫', en: 'Cat', line: '家里的小老板，随时可能翻脸。', pos: { x: 72, y: 90.5, w: 24 } },
   ],
   // fx：这个场景里飘的东西  tone：场景的主色调，用来打光
   bg: [
