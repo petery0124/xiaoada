@@ -1,0 +1,7 @@
+# 不上传：原始收图、给 AI 的参考图包、抠图工具二进制、系统文件
+收图/
+ai-refs/
+ai-refs.zip
+tools/cutout
+tools/cover
+.DS_Store

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#fff6f2">
+<title>小阿答的换装小屋</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- 微信转发时抓的是页面里第一张图，放一张封面 -->
+<div style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><img src="assets/cover.jpg" alt=""></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="svgdefs"></defs></svg>
+
+<div id="app">
+  <header class="topbar">
+    <div class="title"><span id="topName">小阿答</span>的换装小屋<small>DRESS-UP ROOM</small></div>
+    <div class="actions">
+      <button id="btnRandom" class="icon-btn" title="随机搭配">🎲</button>
+      <button id="btnPhoto" class="icon-btn" title="拍照">📷</button>
+      <button id="btnLetter" class="icon-btn hidden" title="信">💌</button>
+    </div>
+  </header>
+
+  <section class="stage" id="stage">
+    <div class="bg" id="bg"></div>
+    <div class="avatar-wrap" id="avatarWrap"></div>
+    <div class="progress" id="progress"></div>
+    <button class="polaroid" id="btnPhotoRef"><img id="refThumb" alt=""><span>原图</span></button>
+    <div class="bubble" id="bubble"></div>
+  </section>
+
+  <section class="wardrobe">
+    <nav class="tabs" id="tabs"></nav>
+    <div class="items" id="items"></div>
+  </section>
+</div>
+
+<!-- 开场 -->
+<div id="intro" class="overlay intro">
+  <div class="intro-title"><span id="introName">小阿答</span>的换装小屋</div>
+  <div class="intro-sub">一份小礼物 · 里面挂着你穿过的那些好看</div>
+  <div class="closet" id="closet">
+    <div class="closet-inside">👗</div>
+    <div class="door left"><span class="knob"></span></div>
+    <div class="door right"><span class="knob"></span></div>
+  </div>
+  <div class="intro-tip">点一下，推开衣柜门</div>
+</div>
+
+<!-- 原图 -->
+<div id="lightbox" class="overlay lightbox hidden">
+  <div class="sheet">
+    <button class="close">✕</button>
+    <img id="lbImg" alt="">
+    <div class="hint" id="lbCap"></div>
+  </div>
+</div>
+
+<!-- 拍照 -->
+<div id="poster" class="overlay poster hidden">
+  <div class="sheet">
+    <button class="close">✕</button>
+    <img id="posterImg" alt="">
+    <div class="hint">长按图片保存到相册</div>
+  </div>
+</div>
+
+<!-- 信 -->
+<div id="letter" class="overlay hidden">
+  <div class="sheet">
+    <button class="close">✕</button>
+    <h3 id="letterTitle"></h3>
+    <div id="letterBody"></div>
+    <div class="hint" id="letterHint"></div>
+    <button class="pill">收下了</button>
+  </div>
+</div>
+
+<script src="avatar.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
