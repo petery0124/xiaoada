@@ -188,7 +188,9 @@
     const cur = a.classList.contains('on') ? a : b, nxt = cur === a ? b : a;
     const src = lookSrc(id);
     if (cur.getAttribute('src') === src) return;
+    const box = $('#lookBox'); box.classList.add('loading');
     const show = () => {
+      box.classList.remove('loading'); preload();
       nxt.classList.add('on'); cur.classList.remove('on');
       if (withFx && !reduced) {
         const inner = $('#lookInner'); inner.classList.remove('fxing'); void inner.offsetWidth; inner.classList.add('fxing');
@@ -197,7 +199,7 @@
         FX.burst(r.left - s.left + r.width / 2, r.top - s.top + r.height * .42, 30);
       }
     };
-    nxt.onload = show; nxt.onerror = () => { nxt.src = lookSrc('base'); };
+    nxt.onload = show; nxt.onerror = () => { box.classList.remove('loading'); if (id !== 'base') nxt.src = lookSrc('base'); };
     nxt.src = src;
     if (nxt.complete && nxt.naturalWidth) show();
   }
@@ -468,11 +470,15 @@
   $('#introName').textContent = DATA.name; $('#topName').textContent = DATA.name;
   $('#btnMusic').classList.toggle('playing', false);
 
-  // 预加载全部立绘，进度显示在开场页底部那根线上
-  (function preload() {
-    const ids = DATA.outfit.map(o => o.id); let done = 0;
-    ids.forEach(id => { const im = new Image(); im.onload = im.onerror = () => { done++; $('#loadBar').style.width = (done / ids.length * 100) + '%'; }; im.src = lookSrc(id); });
-  })();
+  // 预加载其余立绘：两路并行，别和当前这张抢带宽；进度显示在开场页底部那根线上（开场页可能已经关了，要判空）
+  let preloadStarted = false;
+  function preload() {
+    if (preloadStarted) return; preloadStarted = true;
+    const ids = DATA.outfit.map(o => o.id).filter(id => id !== state.outfit); let done = 0, i = 0;
+    const bar = () => { const b = $('#loadBar'); if (b) b.style.width = (done / ids.length * 100) + '%'; };
+    const next = () => { if (i >= ids.length) return; const im = new Image(); im.onload = im.onerror = () => { done++; bar(); next(); }; im.src = lookSrc(ids[i++]); };
+    next(); next();
+  }
 
   applyTheme(theme, false);
   renderTabs(); renderItems(); render(false);

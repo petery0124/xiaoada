@@ -367,3 +367,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; background: none
 [data-theme="princess"] .door::after { border-color: rgba(228, 138, 166, .45); }
 [data-theme="princess"] .knob { background: #e48aa6; box-shadow: 0 0 10px rgba(228, 138, 166, .6); }
 [data-theme="princess"] .intro-load { background: rgba(201, 96, 127, .15); }
+
+/* 立绘加载中的转圈 */
+.look-box.loading::after {
+  content: ""; position: absolute; left: 50%; top: 44%; width: 26px; height: 26px; margin: -13px; z-index: 3;
+  border-radius: 50%; border: 2px solid rgba(231, 191, 168, .22); border-top-color: var(--gold);
+  animation: spin2 .9s linear infinite;
+}
+@keyframes spin2 { to { transform: rotate(360deg); } }
