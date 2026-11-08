@@ -1,331 +1,430 @@
 (function () {
   const $ = s => document.querySelector(s);
-  document.getElementById('svgdefs').innerHTML = AV.DEFS;
-  const DEBUG = /debug/.test(location.search);
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ---------- 存储 ---------- */
+  /* ---------- 存储与状态 ---------- */
   const store = {
     get(k, d) { try { const v = localStorage.getItem('xad_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('xad_' + k, JSON.stringify(v)); } catch (e) { } },
   };
-  const state = Object.assign({ outfit: 'strawberry', hair: 'twin', head: 'redclips', acc: 'strawbag', bg: 'pinkroom' }, store.get('state', {}));
+  const saved = store.get('state', {});
+  const state = { outfit: saved.outfit || 'strawberry', bg: saved.bg || 'pinkroom' };
   const tried = new Set(store.get('tried', []));
   let unlocked = store.get('unlocked', false);
-  let tab = 'outfit';
+  let musicOn = store.get('music', true);
+  let tab = 'outfit', posterTpl = 'mag';
 
-  /* ---------- 资源模式 ----------
-   * assets/looks/base.png 存在 → 整张立绘模式（每套衣服一张 PNG，头饰配饰是贴纸叠上去）
-   * 不存在 → 用 avatar.js 里的 SVG 形象兜底
-   */
-  let imgMode = false;
-  const looks = {};    // outfitId -> true/false
-  const stickers = {}; // stickerId -> true/false
-  // 贴纸位置：相对立绘图框的百分比（x,y 是中心点，w 是宽度）。图到了以后用 ?debug 模式拖一拖校准。
-  // 按基础立绘量过：头顶 5.5%，下巴 21.5%，头宽约 17%，肩 24%，手掌 53%（左手 x29% / 右手 x70%），腰 36%，裙摆 62%，脚底 97%
-  const STICKER_POS = Object.assign({
-    catears: { x: 49.5, y: 7.5, w: 22 }, tiara: { x: 49.5, y: 6.5, w: 14 }, duck: { x: 49.5, y: 6, w: 24 }, pandahat: { x: 49.5, y: 9, w: 26 },
-    redclips: { x: 44, y: 12, w: 8 }, whitebows: { x: 49.5, y: 10, w: 20 }, blackbows: { x: 49.5, y: 16, w: 24 },
-    strawbag: { x: 58, y: 46, w: 13 }, cat: { x: 74, y: 93, w: 16 }, teddyphone: { x: 29, y: 54, w: 8 },
-    bouquet: { x: 68, y: 52, w: 26 }, pizza: { x: 27, y: 55, w: 16 }, cocktail: { x: 70, y: 52, w: 8 }, pearls: { x: 49.5, y: 23.5, w: 10 },
-  }, DEBUG ? store.get('stickerPos', {}) : {});
-  const probe = src => new Promise(res => { const im = new Image(); im.onload = () => res(true); im.onerror = () => res(false); im.src = src; });
+  const byId = (kind, id) => DATA[kind].find(i => i.id === id) || DATA[kind][0];
+  const visibleOutfits = () => DATA.outfit.filter(o => !o.hidden);
+  const total = visibleOutfits().length;
+  const KINDS = [['outfit', '穿搭'], ['bg', '背景']];
+  const lookSrc = id => `assets/looks/${id}.png`;
+  const thumbSrc = id => `assets/looks-thumb/${id}.png`;
   const loadImg = src => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
 
-  // 立绘模式下，头饰/配饰只有在有贴纸图时才出现（立绘里本来就画了原版的头饰和配饰）
-  const anySticker = () => Object.values(stickers).some(Boolean);
-  const kinds = () => imgMode
-    ? [['outfit', '穿搭'], ...(anySticker() ? [['head', '头饰'], ['acc', '配饰']] : []), ['bg', '背景']]
-    : [['outfit', '衣服'], ['hair', '发型'], ['head', '头饰'], ['acc', '配饰'], ['bg', '背景']];
-  const byId = (kind, id) => DATA[kind].find(i => i.id === id) || DATA[kind][0];
-  const total = DATA.outfit.filter(o => !o.hidden).length;
-  function listFor(kind) {
-    let list = DATA[kind];
-    if (kind === 'outfit') return list; // 隐藏款也在列表里（带锁）
-    if (imgMode && (kind === 'head' || kind === 'acc')) list = list.filter(i => i.id === 'none' || stickers[i.id]);
-    return list.filter(i => !i.hidden || unlocked);
-  }
-  const hasLook = id => imgMode && looks[id] !== false;
+  /* ---------- 粒子特效（canvas） ---------- */
+  const FX = (() => {
+    const cv = $('#fx'), ctx = cv.getContext('2d');
+    let W = 0, H = 0, dpr = 1, theme = 'sparkle', parts = [], bursts = [], raf = 0, t0 = performance.now();
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    const THEMES = {
+      petals: { n: 26, make: () => ({ x: rnd(0, W), y: rnd(-H, H), s: rnd(5, 11), vx: rnd(-.25, .25), vy: rnd(.35, .8), r: rnd(0, 6.3), vr: rnd(-.03, .03), a: rnd(.45, .85), c: pick(['#f9c5d1', '#f7a8b8', '#ffdbe4', '#fff1f4']), ph: rnd(0, 6.3) }) },
+      sparkle: { n: 30, make: () => ({ x: rnd(0, W), y: rnd(0, H), s: rnd(1.5, 3.6), vx: rnd(-.1, .1), vy: rnd(-.25, -.08), a: rnd(.4, .9), c: pick(['#fff3dc', '#f5dcc8', '#ffffff']), ph: rnd(0, 6.3) }) },
+      bubbles: { n: 24, make: () => ({ x: rnd(0, W), y: rnd(0, H), s: rnd(3, 11), vx: 0, vy: rnd(-.5, -.2), a: rnd(.25, .6), ph: rnd(0, 6.3) }) },
+      stars: { n: 70, make: () => ({ x: rnd(0, W), y: rnd(0, H * .8), s: rnd(.8, 2.2), vx: 0, vy: 0, a: rnd(.3, .9), ph: rnd(0, 6.3) }) },
+      bokeh: { n: 16, make: () => ({ x: rnd(0, W), y: rnd(0, H), s: rnd(14, 42), vx: rnd(-.15, .15), vy: rnd(-.12, .12), a: rnd(.08, .2), c: pick(['#ffd9a8', '#ffb98a', '#fff1dc', '#f6c6d2']), ph: rnd(0, 6.3) }) },
+      snow: { n: 60, make: () => ({ x: rnd(0, W), y: rnd(-H, H), s: rnd(1.2, 3.4), vx: rnd(-.2, .2), vy: rnd(.4, 1), a: rnd(.4, .9), ph: rnd(0, 6.3) }) },
+      confetti: { n: 34, make: () => ({ x: rnd(0, W), y: rnd(-H, H), s: rnd(4, 8), vx: rnd(-.3, .3), vy: rnd(.6, 1.2), r: rnd(0, 6.3), vr: rnd(-.08, .08), a: rnd(.6, .95), c: pick(['#f6b9c9', '#f5dcc8', '#ffffff', '#e7bfa8', '#d7b6e6']), ph: rnd(0, 6.3) }) },
+    };
+    function resize() {
+      const r = cv.getBoundingClientRect(); dpr = Math.min(2, devicePixelRatio || 1);
+      W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      setTheme(theme, true);
+    }
+    function setTheme(name, force) {
+      if (!force && name === theme) return;
+      theme = THEMES[name] ? name : 'sparkle';
+      const T = THEMES[theme]; parts = Array.from({ length: reduced ? 0 : T.n }, T.make);
+    }
+    function star(x, y, s, a, c) {
+      ctx.globalAlpha = a; ctx.fillStyle = c; ctx.beginPath();
+      for (let i = 0; i < 8; i++) { const ang = i * Math.PI / 4, rr = i % 2 ? s * .38 : s; ctx.lineTo(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr); }
+      ctx.closePath(); ctx.fill();
+    }
+    function draw(now) {
+      raf = requestAnimationFrame(draw);
+      if (document.hidden) return;
+      const t = (now - t0) / 1000;
+      ctx.clearRect(0, 0, W, H);
+      for (const p of parts) {
+        p.x += p.vx + (p.ph ? Math.sin(t * .7 + p.ph) * .25 : 0); p.y += p.vy;
+        if (p.r !== undefined) p.r += p.vr;
+        if (p.y > H + 20) { p.y = -20; p.x = rnd(0, W); } if (p.y < -20) { p.y = H + 20; p.x = rnd(0, W); }
+        if (p.x > W + 20) p.x = -20; if (p.x < -20) p.x = W + 20;
+        const tw = .55 + .45 * Math.sin(t * 2 + p.ph);
+        if (theme === 'petals') {
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.globalAlpha = p.a; ctx.fillStyle = p.c;
+          ctx.beginPath(); ctx.ellipse(0, 0, p.s, p.s * .55, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        } else if (theme === 'sparkle') {
+          star(p.x, p.y, p.s * (0.7 + tw * .5), p.a * tw, p.c);
+        } else if (theme === 'bubbles') {
+          ctx.globalAlpha = p.a * .9; ctx.strokeStyle = 'rgba(210,240,255,.9)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = p.a * .5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x - p.s * .35, p.y - p.s * .35, p.s * .22, 0, Math.PI * 2); ctx.fill();
+        } else if (theme === 'stars') {
+          ctx.globalAlpha = p.a * tw; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill();
+        } else if (theme === 'bokeh') {
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.s); g.addColorStop(0, p.c); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.globalAlpha = p.a * (0.8 + tw * .3); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill();
+        } else if (theme === 'snow') {
+          ctx.globalAlpha = p.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill();
+        } else if (theme === 'confetti') {
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.globalAlpha = p.a; ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore();
+        }
+      }
+      // 换装时的星光爆发
+      for (let i = bursts.length - 1; i >= 0; i--) {
+        const b = bursts[i]; b.life -= 1 / 60; if (b.life <= 0) { bursts.splice(i, 1); continue; }
+        b.x += b.vx; b.y += b.vy; b.vy += .04; b.vx *= .985;
+        star(b.x, b.y, b.s * Math.min(1, b.life * 2.2), Math.min(1, b.life * 1.5), b.c);
+      }
+      ctx.globalAlpha = 1;
+    }
+    function burst(x, y, n = 26) {
+      if (reduced) return;
+      for (let i = 0; i < n; i++) {
+        const ang = rnd(0, Math.PI * 2), sp = rnd(1.2, 4.2);
+        bursts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 1, s: rnd(2.5, 6), life: rnd(.6, 1.1), c: pick(['#fff3dc', '#f5dcc8', '#ffffff', '#f6b9c9']) });
+      }
+    }
+    addEventListener('resize', resize);
+    resize(); raf = requestAnimationFrame(draw);
+    return { setTheme, burst, resize };
+  })();
+
+  /* ---------- 八音盒背景音（Web Audio 合成，没有外部音频文件） ---------- */
+  const Music = (() => {
+    let ac, master, wet, timer, next = 0, step = 0, on = false;
+    const STEP = 60 / 72 / 2; // 72 BPM 八分音符
+    const melody = [76, 79, 81, 84, 0, 81, 79, 76, 74, 76, 79, 0, 81, 79, 76, 74, 72, 76, 79, 81, 0, 84, 81, 79, 76, 74, 72, 0, 74, 76, 0, 0];
+    const bass = [60, 57, 65, 67];
+    const f = m => 440 * Math.pow(2, (m - 69) / 12);
+    function ensure() {
+      if (ac) return;
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain(); master.gain.value = 0; master.connect(ac.destination);
+      const conv = ac.createConvolver(); const len = ac.sampleRate * 1.8, buf = ac.createBuffer(2, len, ac.sampleRate);
+      for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+      conv.buffer = buf; wet = ac.createGain(); wet.gain.value = .32; master.connect(conv); conv.connect(wet); wet.connect(ac.destination);
+    }
+    function note(freq, t, vel, dur) {
+      const parts = [[1, 1, dur], [2, .32, dur * .45], [3.01, .1, .18]];
+      for (const [mul, g, d] of parts) {
+        const o = ac.createOscillator(), e = ac.createGain();
+        o.type = 'sine'; o.frequency.value = freq * mul;
+        e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(vel * g, t + .005); e.gain.exponentialRampToValueAtTime(.0006, t + d);
+        o.connect(e); e.connect(master); o.start(t); o.stop(t + d + .05);
+      }
+    }
+    function tick() {
+      while (next < ac.currentTime + .5) {
+        const i = step % melody.length;
+        const m = melody[i];
+        if (m) note(f(m + (Math.random() < .08 ? 12 : 0)), next, .5 + Math.random() * .2, 1.7);
+        if (i % 8 === 0) note(f(bass[(step / 8 | 0) % bass.length]), next, .3, 2.6);
+        next += STEP; step++;
+      }
+    }
+    return {
+      start() { ensure(); ac.resume(); on = true; next = Math.max(next, ac.currentTime + .1); master.gain.cancelScheduledValues(ac.currentTime); master.gain.linearRampToValueAtTime(.24, ac.currentTime + 1.2); clearInterval(timer); timer = setInterval(tick, 120); tick(); },
+      stop() { if (!ac) return; on = false; clearInterval(timer); master.gain.cancelScheduledValues(ac.currentTime); master.gain.linearRampToValueAtTime(0, ac.currentTime + .6); },
+      get on() { return on; },
+    };
+  })();
 
   /* ---------- 渲染 ---------- */
-  function render() {
-    const o = byId('outfit', state.outfit);
-    const wrap = $('#avatarWrap');
-    if (imgMode) {
-      // 这套还没有立绘图时，先用基础立绘顶着
-      const src = hasLook(o.id) ? `assets/looks/${o.id}.png` : 'assets/looks/base.png';
-      wrap.innerHTML = `<div class="look-box" id="lookBox"><img class="look" src="${src}" alt="" decoding="async"><div class="spinner"></div>${stickerHTML()}</div>`;
-      const im = wrap.querySelector('.look');
-      im.onerror = () => { if (hasLook(o.id)) { looks[o.id] = false; render(); renderItems(); } };
-      im.onload = () => im.classList.add('ready');
-      if (im.complete && im.naturalWidth) im.classList.add('ready');
-      fitLook();
-    } else {
-      wrap.innerHTML = AV.svg(state);
-    }
-    const bg = byId('bg', state.bg);
-    $('#bg').style.backgroundImage = bg.img ? `url(assets/bg/${bg.img}.jpg)` : 'linear-gradient(160deg,#fff3e9,#ffe3ec)';
-    $('#refThumb').src = `assets/thumb/${o.photo}.jpg`;
-    $('#progress').textContent = unlocked ? '衣柜已全部解锁 ✨' : `已试穿 ${Math.min(tried.size, total)}/${total}`;
-    $('#btnLetter').classList.toggle('hidden', !unlocked);
-    store.set('state', state);
+  let bgFlip = false, typeTimer = 0;
+  function setBg(bg) {
+    const layers = [$('#bgA'), $('#bgB')];
+    const show = layers[bgFlip ? 1 : 0], hide = layers[bgFlip ? 0 : 1]; bgFlip = !bgFlip;
+    show.style.backgroundImage = bg.img ? `url(assets/bg/${bg.img}.jpg)` : 'linear-gradient(160deg,#5a3f4a,#3a2a36)';
+    show.classList.add('show'); hide.classList.remove('show');
+    $('#stage').style.setProperty('--tone', bg.tone || '#f6b9c9');
+    FX.setTheme(bg.fx || 'sparkle');
   }
-  function stickerHTML() {
-    return ['head', 'acc'].map(k => state[k]).filter(id => id && id !== 'none' && stickers[id]).map(id => {
-      const p = STICKER_POS[id] || { x: 50, y: 50, w: 30 };
-      return `<img class="sticker" data-id="${id}" src="assets/stickers/${id}.png" style="left:${p.x}%;top:${p.y}%;width:${p.w}%" alt="" draggable="false">`;
-    }).join('');
+  function swapLook(id, withFx) {
+    const a = $('#lookA'), b = $('#lookB');
+    const cur = a.classList.contains('on') ? a : b, nxt = cur === a ? b : a;
+    const src = lookSrc(id);
+    if (cur.getAttribute('src') === src) return;
+    const show = () => {
+      nxt.classList.add('on'); cur.classList.remove('on');
+      if (withFx && !reduced) {
+        const inner = $('#lookInner'); inner.classList.remove('fxing'); void inner.offsetWidth; inner.classList.add('fxing');
+        const sw = $('#sweep'); sw.classList.remove('run'); void sw.offsetWidth; sw.classList.add('run');
+        const r = $('#lookBox').getBoundingClientRect(), s = $('#stage').getBoundingClientRect();
+        FX.burst(r.left - s.left + r.width / 2, r.top - s.top + r.height * .42, 30);
+      }
+    };
+    nxt.onload = show; nxt.onerror = () => { nxt.src = lookSrc('base'); };
+    nxt.src = src;
+    if (nxt.complete && nxt.naturalWidth) show();
   }
   function fitLook() {
-    const box = $('#lookBox'); if (!box) return;
     const st = $('#stage').getBoundingClientRect();
-    const h = st.height - 80, w = Math.min(h * 2 / 3, st.width - 24);
-    box.style.width = w + 'px'; box.style.height = (w * 1.5) + 'px';
+    const h = st.height - 96, w = Math.min(h * 2 / 3, st.width - 40);
+    const box = $('#lookBox'); box.style.width = w + 'px'; box.style.height = (w * 1.5) + 'px';
   }
-  window.addEventListener('resize', fitLook);
-
+  function typeLine(text) {
+    const el = $('#capLine'); clearInterval(typeTimer); el.textContent = ''; el.classList.remove('done');
+    if (reduced) { el.textContent = text; el.classList.add('done'); return; }
+    let i = 0; typeTimer = setInterval(() => { el.textContent = text.slice(0, ++i); if (i >= text.length) { clearInterval(typeTimer); el.classList.add('done'); } }, 34);
+  }
+  function caption(o) { $('#capName').innerHTML = `${o.name}<small>${o.en || ''}</small>`; typeLine(o.line); }
+  function ring() {
+    const n = Math.min(tried.size, total), c = 2 * Math.PI * 19;
+    $('#ringFg').style.strokeDashoffset = c * (1 - n / total);
+    $('#ringText').textContent = unlocked ? '✓' : `${n}/${total}`;
+    $('#ring').classList.toggle('done', unlocked);
+    $('#btnLetter').classList.toggle('hidden', !unlocked);
+  }
+  function render(withFx) {
+    const o = byId('outfit', state.outfit), bg = byId('bg', state.bg);
+    setBg(bg); swapLook(o.id, withFx); fitLook(); ring();
+    store.set('state', state);
+  }
   function renderTabs() {
-    $('#tabs').innerHTML = kinds().map(([k, n]) => `<button class="tab ${k === tab ? 'active' : ''}" data-k="${k}">${n}</button>`).join('');
-  }
-  function previewHTML(kind, item) {
-    if (kind === 'bg') return item.img ? `<img src="assets/thumb/${item.img}.jpg" alt="">` : `<div class="pv"></div>`;
-    if (imgMode) {
-      if (kind === 'outfit') {
-        if (looks[item.id] !== false) return `<img class="contain" src="assets/looks-thumb/${item.id}.png" alt="" loading="lazy" decoding="async" data-look="${item.id}">`;
-        return `<img src="assets/thumb/${item.photo}.jpg" alt="">`; // 还没画好的那套先放原图
-      }
-      if (item.id === 'none') return `<div class="pv none">✕</div>`;
-      if (kind === 'head' || kind === 'acc') return `<img class="contain sticker-pv" src="assets/stickers/${item.id}.png" alt="">`;
-    }
-    return AV.preview(kind, item.id);
+    $('#tabs').innerHTML = KINDS.map(([k, n]) => `<button class="tab ${k === tab ? 'active' : ''}" data-k="${k}">${n}</button>`).join('');
   }
   function renderItems() {
-    const list = listFor(tab);
-    $('#items').innerHTML = list.map(item => {
-      const locked = item.hidden && !unlocked;
-      const active = state[tab] === item.id;
-      return `<button class="item ${active ? 'active' : ''} ${locked ? 'locked' : ''} ${item.id === 'cream' ? 'cream-swatch' : ''}" data-id="${item.id}">
-        ${previewHTML(tab, item)}<span class="nm">${locked ? '？？？' : item.name}</span>${item.hidden && unlocked ? '<span class="badge">限定</span>' : ''}
-      </button>`;
-    }).join('');
-    const act = $('#items .item.active');
-    if (act) act.scrollIntoView({ inline: 'center', block: 'nearest' });
+    const el = $('#items');
+    if (tab === 'outfit') {
+      el.innerHTML = DATA.outfit.map(o => {
+        const locked = o.hidden && !unlocked, active = state.outfit === o.id;
+        return `<button class="card ${active ? 'active' : ''} ${locked ? 'locked' : ''}" data-id="${o.id}">
+          ${o.hidden && unlocked ? '<span class="badge">限定</span>' : ''}
+          ${tried.has(o.id) && !locked ? '<span class="tick">✓</span>' : ''}
+          <img src="${thumbSrc(o.id)}" alt="" loading="lazy" decoding="async">
+          ${locked ? '<svg class="lock"><use href="#i-lock"/></svg>' : ''}
+          <span class="nm">${locked ? '？？？' : o.name}</span><span class="en">${locked ? 'LOCKED' : (o.en || '')}</span>
+        </button>`;
+      }).join('');
+    } else {
+      el.innerHTML = DATA.bg.map(b => `<button class="scene ${state.bg === b.id ? 'active' : ''}" data-id="${b.id}">
+        <i style="background-image:${b.img ? `url(assets/thumb/${b.img}.jpg)` : 'linear-gradient(160deg,#5a3f4a,#3a2a36)'}"></i><span>${b.name}</span></button>`).join('');
+    }
+    const act = el.querySelector('.active'); if (act) act.scrollIntoView({ inline: 'center', block: 'nearest' });
   }
-  function say(text) {
-    const b = $('#bubble');
-    b.textContent = text;
-    b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+  let toastTimer = 0;
+  function toast(text, ms = 3200) {
+    const t = $('#toast'); t.textContent = text; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
   }
 
   /* ---------- 交互 ---------- */
   function pick(kind, id) {
     const item = byId(kind, id);
     if (kind === 'outfit') {
-      if (item.hidden && !unlocked) { say('试穿完所有衣服，衣柜深处会有东西。'); return; }
-      if (imgMode) { state.bg = (item.set && item.set.bg) || state.bg; state.head = 'none'; state.acc = 'none'; }
-      else Object.assign(state, item.set || {});
-      if (!item.hidden) tried.add(id);
-      store.set('tried', [...tried]);
+      if (item.hidden && !unlocked) { toast('试穿完所有衣服，衣柜深处会有东西。'); return; }
+      state.bg = (item.set && item.set.bg) || state.bg;
+      if (!item.hidden) tried.add(id); store.set('tried', [...tried]);
+      state.outfit = id; render(true); caption(item);
+    } else {
+      state.bg = id; render(false); toast(item.line, 2200);
     }
-    state[kind] = id;
-    render(); renderItems();
-    say(item.line || item.name);
-    checkUnlock();
+    renderItems(); checkUnlock();
   }
   function checkUnlock() {
     if (unlocked) return;
-    if (DATA.outfit.filter(o => !o.hidden).every(o => tried.has(o.id))) {
+    if (visibleOutfits().every(o => tried.has(o.id))) {
       unlocked = true; store.set('unlocked', true);
-      confetti();
-      setTimeout(() => { render(); renderItems(); openLetter(true); }, 900);
+      confetti(); setTimeout(() => { ring(); renderItems(); openLetter(true); }, 1000);
     }
   }
   function randomize() {
     const r = arr => arr[Math.floor(Math.random() * arr.length)];
-    for (const [k] of kinds()) {
-      const pool = listFor(k).filter(i => !i.hidden || unlocked);
-      if (pool.length) state[k] = r(pool).id;
-    }
-    const o = byId('outfit', state.outfit); if (!o.hidden) tried.add(o.id); store.set('tried', [...tried]);
-    render(); renderItems();
-    say(r(['随机搭配，看看合不合适？', '这套……好像也不错？', '换个风格试试。', '衣柜摇了摇，掉出来这套。']));
-    checkUnlock(); bounce();
+    const pool = DATA.outfit.filter(o => (!o.hidden || unlocked) && o.id !== state.outfit);
+    const o = r(pool); state.outfit = o.id; state.bg = r(DATA.bg).id;
+    if (!o.hidden) tried.add(o.id); store.set('tried', [...tried]);
+    render(true); caption(o); renderItems(); checkUnlock();
+    toast(r(['衣柜摇了摇，掉出来这套。', '这套……好像也不错？', '换个风格试试。']), 2000);
   }
-  function bounce() { const w = $('#avatarWrap'); w.classList.remove('bounce'); void w.offsetWidth; w.classList.add('bounce'); }
   function confetti() {
     const box = document.createElement('div'); box.className = 'confetti';
-    const glyphs = ['🎀', '✨', '💗', '🍓', '🌸', '⭐'];
-    for (let i = 0; i < 40; i++) {
-      const s = document.createElement('span');
-      s.textContent = glyphs[i % glyphs.length];
-      s.style.left = Math.random() * 100 + '%';
-      s.style.animationDelay = Math.random() * 0.8 + 's';
-      s.style.fontSize = 14 + Math.random() * 16 + 'px';
+    const glyphs = ['✦', '❀', '✿', '♡', '✧', '❁'], colors = ['#f5dcc8', '#f6b9c9', '#e7bfa8', '#fff', '#d7b6e6'];
+    for (let i = 0; i < 46; i++) {
+      const s = document.createElement('span'); s.textContent = glyphs[i % glyphs.length];
+      s.style.left = Math.random() * 100 + '%'; s.style.color = colors[i % colors.length];
+      s.style.animationDelay = Math.random() * .9 + 's'; s.style.fontSize = 12 + Math.random() * 16 + 'px';
       box.appendChild(s);
     }
-    document.body.appendChild(box);
-    setTimeout(() => box.remove(), 3800);
+    document.body.appendChild(box); setTimeout(() => box.remove(), 4200);
   }
-  function hearts(x, y) {
-    const stage = $('#stage'); const rect = stage.getBoundingClientRect();
-    for (let i = 0; i < 5; i++) {
-      const h = document.createElement('span'); h.className = 'heart';
-      h.textContent = ['💗', '✨', '🌸'][i % 3];
-      h.style.left = (x - rect.left + (Math.random() - .5) * 60) + 'px';
-      h.style.top = (y - rect.top - 10) + 'px';
-      h.style.animationDelay = (i * 0.06) + 's';
-      stage.appendChild(h); setTimeout(() => h.remove(), 1200);
+  function petals(x, y) {
+    const stage = $('#stage'), rect = stage.getBoundingClientRect();
+    for (let i = 0; i < 6; i++) {
+      const p = document.createElement('span'); p.className = 'petal'; p.textContent = ['✿', '✦', '❀', '♡'][i % 4];
+      p.style.left = (x - rect.left + (Math.random() - .5) * 70) + 'px'; p.style.top = (y - rect.top - 10) + 'px';
+      p.style.animationDelay = (i * .05) + 's'; p.style.color = ['#f5dcc8', '#f6b9c9', '#fff'][i % 3];
+      stage.appendChild(p); setTimeout(() => p.remove(), 1300);
     }
+    FX.burst(x - rect.left, y - rect.top, 10);
   }
 
   /* ---------- 弹层 ---------- */
   function openLetter(first) {
     const L = DATA.letter;
-    $('#letterTitle').textContent = first ? '衣柜最深处，还有一件 ✨' : L.title;
+    $('#letterTitle').textContent = first ? '衣柜最深处，还有一件' : L.title;
     $('#letterBody').innerHTML = L.body.map(p => `<p>${p}</p>`).join('') + `<p class="sign">—— ${L.sign}</p>`;
     $('#letterHint').textContent = first ? '生日限定款已经放进衣柜了，去看看。' : '';
     $('#letter').classList.remove('hidden');
   }
-  function openLightbox() {
+  function openCompare() {
     const o = byId('outfit', state.outfit);
-    $('#lbImg').src = `assets/photo/${o.photo}.jpg`;
-    $('#lbCap').textContent = `${o.name} · 原图`;
-    $('#lightbox').classList.remove('hidden');
+    $('#cmpLook').src = lookSrc(o.id); $('#cmpPhoto').src = `assets/photo/${o.photo}.jpg`;
+    setCmp(50); $('#compare').classList.remove('hidden');
+  }
+  function setCmp(pct) {
+    pct = Math.max(2, Math.min(98, pct));
+    $('#cmpPhoto').style.clipPath = `inset(0 ${100 - pct}% 0 0)`; $('#cmpHandle').style.left = pct + '%';
+  }
+  function openBook() {
+    $('#bookGrid').innerHTML = DATA.outfit.map(o => {
+      const locked = o.hidden && !unlocked, done = tried.has(o.id);
+      return `<button class="bk ${state.outfit === o.id ? 'active' : ''} ${locked ? 'locked' : (done ? '' : 'todo')}" data-id="${o.id}">
+        <img src="${thumbSrc(o.id)}" alt="">${done && !locked ? '<span class="tick">✓</span>' : ''}${locked ? '<svg class="lock"><use href="#i-lock"/></svg>' : ''}
+        <span class="nm">${locked ? '？？？' : o.name}</span><span class="en">${locked ? 'LOCKED' : (o.en || '')}</span></button>`;
+    }).join('');
+    $('#book').classList.remove('hidden');
   }
 
-  /* ---------- 拍照：合成一张可保存的海报 ---------- */
-  async function makePoster() {
-    say('咔嚓，正在冲洗照片……');
-    const Wp = 1080, Hp = 1700, cv = document.createElement('canvas'); cv.width = Wp; cv.height = Hp;
-    const ctx = cv.getContext('2d');
-    const bg = byId('bg', state.bg);
-    ctx.fillStyle = '#ffe9ef'; ctx.fillRect(0, 0, Wp, Hp);
+  /* ---------- 拍照：两种版式 ---------- */
+  const FONT_SERIF = '"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",Georgia,serif';
+  const FONT_SANS = '-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",sans-serif';
+  function spaced(ctx, text, x, y, spacing) { // 手动字距
+    let total = 0; for (const ch of text) total += ctx.measureText(ch).width + spacing; total -= spacing;
+    let cx = x - total / 2; ctx.textAlign = 'left';
+    for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + spacing; }
+    ctx.textAlign = 'center';
+  }
+  async function drawScene(ctx, Wp, Hp, bg, alpha) {
     if (bg.img) {
       try {
-        const im = await loadImg(`assets/bg/${bg.img}.jpg`);
-        const s = Math.max(Wp / im.width, Hp / im.height) * 1.2;
-        ctx.save(); if ('filter' in ctx) ctx.filter = 'blur(40px) saturate(1.15)';
+        const im = await loadImg(`assets/bg/${bg.img}.jpg`); const s = Math.max(Wp / im.width, Hp / im.height) * 1.25;
+        ctx.save(); ctx.globalAlpha = alpha; if ('filter' in ctx) ctx.filter = 'blur(46px) saturate(1.15)';
         ctx.drawImage(im, (Wp - im.width * s) / 2, (Hp - im.height * s) / 2, im.width * s, im.height * s); ctx.restore();
       } catch (e) { }
-    } else {
-      const g = ctx.createLinearGradient(0, 0, Wp, Hp); g.addColorStop(0, '#fff3e9'); g.addColorStop(1, '#ffe3ec'); ctx.fillStyle = g; ctx.fillRect(0, 0, Wp, Hp);
     }
-    const veil = ctx.createLinearGradient(0, 0, 0, Hp); veil.addColorStop(0, 'rgba(255,255,255,.25)'); veil.addColorStop(.5, 'rgba(255,255,255,0)'); veil.addColorStop(1, 'rgba(255,255,255,.7)');
-    ctx.fillStyle = veil; ctx.fillRect(0, 0, Wp, Hp);
-
-    const o = byId('outfit', state.outfit);
-    const h = 1160, y = 190;
-    try {
-      if (hasLook(o.id)) {
-        const im = await loadImg(`assets/looks/${o.id}.png`);
-        const w = h * 2 / 3, x = (Wp - w) / 2;
-        ctx.save(); ctx.shadowColor = 'rgba(110,50,75,.25)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 20;
-        ctx.drawImage(im, x, y, w, h); ctx.restore();
-        for (const id of [state.head, state.acc]) {
-          if (!id || id === 'none' || !stickers[id]) continue;
-          const p = STICKER_POS[id]; const s = await loadImg(`assets/stickers/${id}.png`);
-          const sw = w * p.w / 100, sh = sw * s.height / s.width;
-          ctx.drawImage(s, x + w * p.x / 100 - sw / 2, y + h * p.y / 100 - sh / 2, sw, sh);
-        }
-      } else {
-        const svgStr = AV.svg(state, { withDefs: true, extra: `width="${AV.W}" height="${AV.H}"` });
-        const url = URL.createObjectURL(new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' }));
-        const im = await loadImg(url);
-        const w = h * AV.W / AV.H;
-        ctx.save(); ctx.shadowColor = 'rgba(110,50,75,.25)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 20;
-        ctx.drawImage(im, (Wp - w) / 2, y, w, h); ctx.restore();
-        URL.revokeObjectURL(url);
-      }
-    } catch (e) { console.warn('poster', e); }
-
-    const font = w => `${w} -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif`;
-    ctx.textAlign = 'center'; ctx.fillStyle = '#5b474d';
-    ctx.font = font('800 54px'); ctx.fillText(`${DATA.name}的换装小屋`, Wp / 2, 100);
-    roundRect(ctx, 90, 1390, Wp - 180, 190, 36, 'rgba(255,255,255,.9)');
-    ctx.fillStyle = '#f08aa6'; ctx.font = font('700 44px'); ctx.fillText(o.name, Wp / 2, 1465);
-    ctx.fillStyle = '#5b474d'; ctx.font = font('500 34px'); ctx.fillText(o.line, Wp / 2, 1530);
-    ctx.fillStyle = '#a3909a'; ctx.font = font('500 26px'); ctx.fillText('长按保存 · 发给朋友炫耀一下', Wp / 2, 1640);
+  }
+  async function makePoster() {
+    toast('咔嚓，正在冲洗照片……', 1800);
+    const o = byId('outfit', state.outfit), bg = byId('bg', state.bg);
+    const look = await loadImg(lookSrc(o.id)).catch(() => null);
+    const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+    const idx = DATA.outfit.findIndex(x => x.id === o.id) + 1;
+    if (posterTpl === 'mag') {
+      const Wp = 1080, Hp = 1620; cv.width = Wp; cv.height = Hp;
+      ctx.fillStyle = '#17111a'; ctx.fillRect(0, 0, Wp, Hp);
+      await drawScene(ctx, Wp, Hp, bg, .6);
+      let g = ctx.createLinearGradient(0, 0, 0, Hp); g.addColorStop(0, 'rgba(23,17,26,.15)'); g.addColorStop(.6, 'rgba(23,17,26,.05)'); g.addColorStop(1, 'rgba(23,17,26,.85)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, Wp, Hp);
+      // 刊名
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#f5dcc8'; ctx.font = `500 200px ${FONT_SERIF}`; spaced(ctx, DATA.name, Wp / 2, 300, 30);
+      ctx.fillStyle = '#e7bfa8'; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, 'DRESS-UP ROOM  ·  ÉDITION PRIVÉE', Wp / 2, 352, 6);
+      // 人物
+      if (look) { const h = 1160, w = h * 2 / 3; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26; ctx.drawImage(look, (Wp - w) / 2, 1425 - h, w, h); ctx.restore(); }
+      // 侧边竖排
+      ctx.save(); ctx.translate(74, 760); ctx.rotate(-Math.PI / 2); ctx.fillStyle = 'rgba(246,238,233,.85)'; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `VOL. ${String(idx).padStart(2, '0')}   ${(o.en || '').toUpperCase()}`, 0, 0, 5); ctx.restore();
+      ctx.save(); ctx.translate(1016, 760); ctx.rotate(Math.PI / 2); ctx.fillStyle = 'rgba(246,238,233,.85)'; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `衣柜试穿  ${Math.min(tried.size, total)} / ${total}`, 0, 0, 6); ctx.restore();
+      // 底部文案
+      ctx.fillStyle = 'rgba(245,220,200,.5)'; ctx.fillRect(90, 1448, Wp - 180, 1);
+      ctx.fillStyle = '#f5dcc8'; ctx.font = `500 46px ${FONT_SERIF}`; spaced(ctx, o.name, Wp / 2, 1512, 8);
+      ctx.fillStyle = 'rgba(246,238,233,.9)'; ctx.font = `400 30px ${FONT_SANS}`; ctx.fillText(o.line, Wp / 2, 1566);
+    } else {
+      const Wp = 1080, Hp = 1400; cv.width = Wp; cv.height = Hp;
+      ctx.fillStyle = '#f7f1ea'; ctx.fillRect(0, 0, Wp, Hp);
+      // 纸张细纹
+      ctx.save(); ctx.globalAlpha = .06; for (let i = 0; i < 1400; i++) { ctx.fillStyle = Math.random() < .5 ? '#000' : '#fff'; ctx.fillRect(Math.random() * Wp, Math.random() * Hp, 2, 2); } ctx.restore();
+      ctx.save(); ctx.beginPath(); ctx.rect(70, 70, 940, 1100); ctx.clip();
+      ctx.fillStyle = '#2a1e28'; ctx.fillRect(70, 70, 940, 1100);
+      await drawScene(ctx, Wp, Hp, bg, .9);
+      const g = ctx.createLinearGradient(0, 70, 0, 1170); g.addColorStop(0, 'rgba(20,12,18,.1)'); g.addColorStop(1, 'rgba(20,12,18,.35)'); ctx.fillStyle = g; ctx.fillRect(70, 70, 940, 1100);
+      if (look) { const h = 1040, w = h * 2 / 3; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 20; ctx.drawImage(look, (Wp - w) / 2, 1170 - 20 - h, w, h); ctx.restore(); }
+      ctx.restore();
+      ctx.textAlign = 'center'; ctx.fillStyle = '#4a3a3e'; ctx.font = `500 52px ${FONT_SERIF}`; spaced(ctx, o.name, Wp / 2, 1262, 10);
+      ctx.fillStyle = '#8a7a7e'; ctx.font = `400 28px ${FONT_SANS}`; ctx.fillText(o.line, Wp / 2, 1318);
+      ctx.fillStyle = '#c99a86'; ctx.font = `400 22px ${FONT_SANS}`; spaced(ctx, `${DATA.name.toUpperCase()}  ·  DRESS-UP ROOM`, Wp / 2, 1362, 5);
+    }
     $('#posterImg').src = cv.toDataURL('image/jpeg', .92);
     $('#poster').classList.remove('hidden');
-    say(o.line);
-  }
-  function roundRect(ctx, x, y, w, h, r, fill) {
-    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-    ctx.fillStyle = fill; ctx.fill();
   }
 
   /* ---------- 事件 ---------- */
   $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; tab = b.dataset.k; renderTabs(); renderItems(); });
-  $('#items').addEventListener('click', e => { const b = e.target.closest('.item'); if (!b) return; pick(tab, b.dataset.id); });
-  // 某套立绘图不存在 → 这套退回 SVG 形象
-  $('#items').addEventListener('error', e => {
-    const id = e.target && e.target.dataset && e.target.dataset.look; if (!id) return;
-    looks[id] = false;
-    const item = byId('outfit', id); e.target.outerHTML = `<img src="assets/thumb/${item.photo}.jpg" alt="">`; // 只换这一张，不整列重画
-  }, true);
+  $('#items').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (!b) return; pick(tab, b.dataset.id); });
   $('#btnRandom').addEventListener('click', randomize);
   $('#btnPhoto').addEventListener('click', makePoster);
+  $('#btnCompare').addEventListener('click', openCompare);
+  $('#btnBook').addEventListener('click', openBook);
   $('#btnLetter').addEventListener('click', () => openLetter(false));
-  $('#btnPhotoRef').addEventListener('click', openLightbox);
-  $('#avatarWrap').addEventListener('click', e => { if (DEBUG && e.target.closest('.sticker')) return; hearts(e.clientX, e.clientY); bounce(); });
+  $('#btnMusic').addEventListener('click', () => { musicOn = !musicOn; store.set('music', musicOn); musicOn ? Music.start() : Music.stop(); $('#btnMusic').classList.toggle('playing', musicOn); toast(musicOn ? '八音盒 · 开' : '八音盒 · 关', 1400); });
+  $('#posterSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; posterTpl = b.dataset.t; document.querySelectorAll('#posterSeg button').forEach(x => x.classList.toggle('active', x === b)); makePoster(); });
+  $('#bookGrid').addEventListener('click', e => { const b = e.target.closest('.bk'); if (!b) return; $('#book').classList.add('hidden'); tab = 'outfit'; renderTabs(); pick('outfit', b.dataset.id); });
   document.querySelectorAll('.overlay .close, .overlay .pill').forEach(b => b.addEventListener('click', e => e.target.closest('.overlay').classList.add('hidden')));
   document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o && !o.classList.contains('intro')) o.classList.add('hidden'); }));
-  // 微信/iOS：禁掉双指缩放和双击放大
+  // 对照滑块
+  const cmp = $('#cmp'); let cmpDown = false;
+  const cmpMove = e => { const r = cmp.getBoundingClientRect(); setCmp((e.clientX - r.left) / r.width * 100); };
+  cmp.addEventListener('pointerdown', e => { cmpDown = true; cmp.setPointerCapture(e.pointerId); cmpMove(e); });
+  cmp.addEventListener('pointermove', e => { if (cmpDown) cmpMove(e); });
+  cmp.addEventListener('pointerup', () => cmpDown = false); cmp.addEventListener('pointercancel', () => cmpDown = false);
+  // 舞台：视差 + 点人物撒花
+  const stage = $('#stage'); let down = null;
+  stage.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+  stage.addEventListener('pointermove', e => {
+    if (!down && e.pointerType === 'touch') return;
+    const r = stage.getBoundingClientRect();
+    stage.style.setProperty('--px', ((e.clientX - r.left) / r.width - .5).toFixed(3));
+    stage.style.setProperty('--py', ((e.clientY - r.top) / r.height - .5).toFixed(3));
+  });
+  const release = e => {
+    stage.style.setProperty('--px', 0); stage.style.setProperty('--py', 0);
+    if (down && e.type === 'pointerup' && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 10 && e.target.closest('.avatar-wrap')) {
+      petals(e.clientX, e.clientY);
+      const inner = $('#lookInner'); inner.classList.remove('bounce'); void inner.offsetWidth; inner.classList.add('bounce');
+    }
+    down = null;
+  };
+  stage.addEventListener('pointerup', release); stage.addEventListener('pointercancel', release); stage.addEventListener('pointerleave', release);
+  addEventListener('resize', () => { fitLook(); FX.resize(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) Music.stop(); else if (musicOn && entered) Music.start(); });
   document.addEventListener('gesturestart', e => e.preventDefault());
   document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
 
-  // 开场
+  /* ---------- 开场 ---------- */
+  let entered = false;
+  function greeting() {
+    const h = new Date().getHours(), G = DATA.greetings;
+    const key = h < 5 ? 'night' : h < 11 ? 'morning' : h < 14 ? 'noon' : h < 18 ? 'afternoon' : h < 23 ? 'evening' : 'night';
+    return (G[key] || '').replace('{name}', DATA.name);
+  }
   $('#closet').addEventListener('click', () => {
     const c = $('#closet'); if (c.classList.contains('open')) return;
-    c.classList.add('open');
-    setTimeout(() => { $('#intro').classList.add('fade'); say(byId('outfit', state.outfit).line); }, 700);
-    setTimeout(() => $('#intro').remove(), 1400);
+    c.classList.add('open'); $('#introTip').textContent = '';
+    if (musicOn) { Music.start(); $('#btnMusic').classList.add('playing'); }
+    setTimeout(() => { $('#intro').classList.add('fade'); entered = true; fitLook(); FX.resize(); toast(greeting(), 3600); caption(byId('outfit', state.outfit)); }, 900);
+    setTimeout(() => $('#intro').remove(), 1900);
   });
-  $('#introName').textContent = DATA.name;
-  $('#topName').textContent = DATA.name;
+  $('#introName').textContent = DATA.name; $('#topName').textContent = DATA.name;
+  $('#btnMusic').classList.toggle('playing', false);
 
-  /* ---------- 调位模式（?debug）：拖动贴纸、滚轮缩放，结果打印在气泡和控制台 ---------- */
-  if (DEBUG) {
-    document.body.classList.add('debug');
-    let drag = null;
-    const wrap = $('#avatarWrap');
-    wrap.addEventListener('pointerdown', e => {
-      const s = e.target.closest('.sticker'); if (!s) return;
-      drag = { id: s.dataset.id, el: s, box: $('#lookBox').getBoundingClientRect() };
-      s.setPointerCapture(e.pointerId); e.preventDefault();
-    });
-    wrap.addEventListener('pointermove', e => {
-      if (!drag) return;
-      const p = STICKER_POS[drag.id];
-      p.x = +((e.clientX - drag.box.left) / drag.box.width * 100).toFixed(1);
-      p.y = +((e.clientY - drag.box.top) / drag.box.height * 100).toFixed(1);
-      drag.el.style.left = p.x + '%'; drag.el.style.top = p.y + '%';
-    });
-    wrap.addEventListener('pointerup', () => {
-      if (!drag) return;
-      store.set('stickerPos', STICKER_POS);
-      say(`${drag.id}: ${JSON.stringify(STICKER_POS[drag.id])}`); console.log('STICKER_POS', JSON.stringify(STICKER_POS));
-      drag = null;
-    });
-    wrap.addEventListener('wheel', e => {
-      const s = e.target.closest('.sticker'); if (!s) return; e.preventDefault();
-      const p = STICKER_POS[s.dataset.id]; p.w = +Math.max(4, p.w - Math.sign(e.deltaY)).toFixed(1);
-      s.style.width = p.w + '%'; store.set('stickerPos', STICKER_POS); say(`${s.dataset.id}: ${JSON.stringify(p)}`);
-    }, { passive: false });
-  }
-
-  /* ---------- 启动 ---------- */
-  (async function init() {
-    renderTabs(); renderItems(); render();
-    $('#bubble').textContent = '点下面的衣柜，给她换一套试试。';
-    imgMode = await probe('assets/looks/base.png');
-    if (imgMode) {
-      $('.closet-inside').innerHTML = `<img src="assets/looks/base.png" alt="">`;
-      if (!kinds().some(([k]) => k === tab)) tab = 'outfit';
-      renderTabs(); renderItems(); render();
-      // 立绘按需加载（每张可能上 MB，不一次全拉）；贴纸小，先探测一遍
-      await Promise.all([...DATA.head, ...DATA.acc].filter(i => i.id !== 'none').map(i => probe(`assets/stickers/${i.id}.png`).then(ok => stickers[i.id] = ok)));
-      if (!kinds().some(([k]) => k === tab)) tab = 'outfit';
-      renderTabs(); renderItems(); render();
-    }
+  // 预加载全部立绘，进度显示在开场页底部那根线上
+  (function preload() {
+    const ids = DATA.outfit.map(o => o.id); let done = 0;
+    ids.forEach(id => { const im = new Image(); im.onload = im.onerror = () => { done++; $('#loadBar').style.width = (done / ids.length * 100) + '%'; }; im.src = lookSrc(id); });
   })();
+
+  renderTabs(); renderItems(); render(false);
+  caption(byId('outfit', state.outfit));
 })();

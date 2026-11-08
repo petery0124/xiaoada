@@ -4,31 +4,65 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="format-detection" content="telephone=no">
-<meta name="theme-color" content="#fff6f2">
+<meta name="theme-color" content="#160f15">
 <title>小阿答的换装小屋</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <!-- 微信转发时抓的是页面里第一张图，放一张封面 -->
-<div style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><img src="assets/cover.jpg" alt=""></div>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="svgdefs"></defs></svg>
+<div class="share-cover" aria-hidden="true"><img src="assets/cover.jpg" alt=""></div>
+<div class="grain" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="16.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 8h7M9 11.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.4-2h5.2L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4 7l8 6 8-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3v18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8 10l-2 2 2 2M16 10l2 2-2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3.5 7h3.2c1.6 0 3 .8 3.9 2.1l2.8 4.3A4.6 4.6 0 0 0 17.3 15.5h3.2M3.5 17h3.2c1.6 0 3-.8 3.9-2.1M13.4 9.1A4.6 4.6 0 0 1 17.3 7h3.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 4.8L20.7 7l-2.2 2.2M18.5 13.3l2.2 2.2-2.2 2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+</svg>
 
 <div id="app">
   <header class="topbar">
-    <div class="title"><span id="topName">小阿答</span>的换装小屋<small>DRESS-UP ROOM</small></div>
+    <div class="brand">
+      <div class="brand-name"><span id="topName">小阿答</span><em>的换装小屋</em></div>
+      <div class="brand-sub">DRESS-UP ROOM · ÉDITION PRIVÉE</div>
+    </div>
     <div class="actions">
-      <button id="btnRandom" class="icon-btn" title="随机搭配">🎲</button>
-      <button id="btnPhoto" class="icon-btn" title="拍照">📷</button>
-      <button id="btnLetter" class="icon-btn hidden" title="信">💌</button>
+      <button id="btnMusic" class="icon-btn" aria-label="音乐"><svg><use href="#i-music"/></svg></button>
+      <button id="btnBook" class="icon-btn" aria-label="图鉴"><svg><use href="#i-book"/></svg></button>
+      <button id="btnPhoto" class="icon-btn" aria-label="拍照"><svg><use href="#i-camera"/></svg></button>
+      <button id="btnLetter" class="icon-btn hidden" aria-label="信"><svg><use href="#i-mail"/></svg></button>
     </div>
   </header>
 
   <section class="stage" id="stage">
-    <div class="bg" id="bg"></div>
-    <div class="avatar-wrap" id="avatarWrap"></div>
-    <div class="progress" id="progress"></div>
-    <button class="polaroid" id="btnPhotoRef"><img id="refThumb" alt=""><span>原图</span></button>
-    <div class="bubble" id="bubble"></div>
+    <div class="bg"><div class="bg-layer" id="bgA"></div><div class="bg-layer" id="bgB"></div></div>
+    <div class="rays"></div>
+    <div class="spot"></div>
+    <canvas class="fx" id="fx"></canvas>
+    <div class="avatar-wrap" id="avatarWrap">
+      <div class="look-box" id="lookBox">
+        <div class="look-inner" id="lookInner">
+          <img class="look l1 on" id="lookA" alt="" decoding="async">
+          <img class="look l2" id="lookB" alt="" decoding="async">
+          <div class="floor-shadow"></div>
+        </div>
+      </div>
+    </div>
+    <div class="sweep" id="sweep"></div>
+    <div class="toast" id="toast"></div>
+    <div class="ring" id="ring" title="试穿进度">
+      <svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="19"/><circle class="ring-fg" id="ringFg" cx="22" cy="22" r="19"/></svg>
+      <span id="ringText">0/10</span>
+    </div>
+    <button class="chip chip-compare" id="btnCompare"><svg><use href="#i-split"/></svg>对照</button>
+    <button class="chip chip-random" id="btnRandom"><svg><use href="#i-shuffle"/></svg>随机</button>
+    <div class="caption" id="caption">
+      <div class="cap-name" id="capName"></div>
+      <div class="cap-line" id="capLine"></div>
+    </div>
   </section>
 
   <section class="wardrobe">
@@ -39,37 +73,55 @@
 
 <!-- 开场 -->
 <div id="intro" class="overlay intro">
-  <div class="intro-title"><span id="introName">小阿答</span>的换装小屋</div>
+  <div class="intro-glow"></div>
+  <div class="intro-title"><span id="introName">小阿答</span><em>的换装小屋</em></div>
   <div class="intro-sub">一份小礼物 · 里面挂着你穿过的那些好看</div>
   <div class="closet" id="closet">
-    <div class="closet-inside">👗</div>
+    <div class="closet-inside"><img src="assets/looks/base.png" alt=""></div>
     <div class="door left"><span class="knob"></span></div>
     <div class="door right"><span class="knob"></span></div>
   </div>
-  <div class="intro-tip">点一下，推开衣柜门</div>
+  <div class="intro-tip" id="introTip">点一下，推开衣柜门</div>
+  <div class="intro-load"><i id="loadBar"></i></div>
 </div>
 
-<!-- 原图 -->
-<div id="lightbox" class="overlay lightbox hidden">
-  <div class="sheet">
+<!-- 对照 -->
+<div id="compare" class="overlay hidden">
+  <div class="sheet dark">
     <button class="close">✕</button>
-    <img id="lbImg" alt="">
-    <div class="hint" id="lbCap"></div>
+    <h3>照片 · 立绘</h3>
+    <div class="cmp" id="cmp">
+      <img class="cmp-look" id="cmpLook" alt="">
+      <img class="cmp-photo" id="cmpPhoto" alt="">
+      <div class="cmp-handle" id="cmpHandle"><i></i></div>
+      <span class="cmp-tag l">照片</span><span class="cmp-tag r">立绘</span>
+    </div>
+    <div class="hint">左右拖动中间的线</div>
   </div>
 </div>
 
 <!-- 拍照 -->
-<div id="poster" class="overlay poster hidden">
-  <div class="sheet">
+<div id="poster" class="overlay hidden">
+  <div class="sheet dark">
     <button class="close">✕</button>
+    <div class="seg" id="posterSeg"><button data-t="mag" class="active">杂志封面</button><button data-t="polaroid">拍立得</button></div>
     <img id="posterImg" alt="">
     <div class="hint">长按图片保存到相册</div>
   </div>
 </div>
 
+<!-- 图鉴 -->
+<div id="book" class="overlay hidden">
+  <div class="sheet dark wide">
+    <button class="close">✕</button>
+    <h3>衣柜图鉴</h3>
+    <div class="book-grid" id="bookGrid"></div>
+  </div>
+</div>
+
 <!-- 信 -->
 <div id="letter" class="overlay hidden">
-  <div class="sheet">
+  <div class="sheet paper">
     <button class="close">✕</button>
     <h3 id="letterTitle"></h3>
     <div id="letterBody"></div>
@@ -78,7 +130,6 @@
   </div>
 </div>
 
-<script src="avatar.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>
