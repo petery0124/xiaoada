@@ -8,7 +8,8 @@
     set(k, v) { try { localStorage.setItem('xad_' + k, JSON.stringify(v)); } catch (e) { } },
   };
   const saved = store.get('state', {});
-  const state = { outfit: saved.outfit || 'strawberry', bg: saved.bg || 'pinkroom' };
+  const state = { outfit: saved.outfit || 'strawberry', bg: saved.bg || 'pinkroom', acc: Array.isArray(saved.acc) ? saved.acc : [] };
+  const DEBUG = /debug/.test(location.search);
   const tried = new Set(store.get('tried', []));
   let unlocked = store.get('unlocked', false);
   let musicOn = store.get('music', true);
@@ -18,13 +19,18 @@
   const byId = (kind, id) => DATA[kind].find(i => i.id === id) || DATA[kind][0];
   const visibleOutfits = () => DATA.outfit.filter(o => !o.hidden);
   const total = visibleOutfits().length;
-  const KINDS = [['outfit', '穿搭'], ['bg', '背景']];
+  // 配饰：只有图真的存在的才出现；一件都没有时不显示这个标签
+  const stickers = {};
+  const accList = () => (DATA.acc || []).filter(a => stickers[a.id]);
+  const kinds = () => [['outfit', '穿搭'], ...(accList().length ? [['acc', '配饰']] : []), ['bg', '背景']];
   /* ---------- 资源地址：WebP 优先；图片走最快的线路（GitHub Pages 或 jsDelivr 镜像） ---------- */
   const ASSETS = { base: '', ver: 5, ext: 'png' }; // 图片换了就把 ver 加一，镜像缓存才会刷新
   const CANDIDATES = ['', 'https://cdn.jsdelivr.net/gh/petery0124/xiaoada@main/', 'https://fastly.jsdelivr.net/gh/petery0124/xiaoada@main/'];
   const asset = p => ASSETS.base ? `${ASSETS.base}${p}?v=${ASSETS.ver}` : p;
   const lookSrc = id => asset(`assets/looks/${id}.${ASSETS.ext}`);
   const thumbSrc = id => asset(`assets/looks-thumb/${id}.${ASSETS.ext}`);
+  const stickerSrc = id => asset(`assets/stickers/${id}.${ASSETS.ext}`);
+  const probe = src => new Promise(res => { const im = new Image(); im.onload = () => res(true); im.onerror = () => res(false); im.src = src; });
   const loadImg = src => new Promise((res, rej) => { const im = new Image(); if (/^https?:/.test(src)) im.crossOrigin = 'anonymous'; im.onload = () => res(im); im.onerror = rej; im.src = src; });
   const webpTest = new Promise(res => { const im = new Image(); im.onload = () => res(im.width > 0); im.onerror = () => res(false); im.src = 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA'; });
   // 三条线路同时下一张 3KB 的小图，谁先到用谁；1.5 秒都没结果就用本站
@@ -236,11 +242,20 @@
   }
   function render(withFx) {
     const o = byId('outfit', state.outfit), bg = byId('bg', state.bg);
-    setBg(bg); swapLook(o.id, withFx); fitLook(); ring();
+    setBg(bg); swapLook(o.id, withFx); fitLook(); ring(); renderStickers();
     store.set('state', state);
   }
+  // 配饰叠在人物上：位置按人物图框的百分比
+  function renderStickers() {
+    state.acc = state.acc.filter(id => stickers[id]);
+    $('#stickers').innerHTML = state.acc.map(id => {
+      const a = (DATA.acc || []).find(x => x.id === id); if (!a) return '';
+      const p = a.pos || { x: 50, y: 50, w: 30 };
+      return `<img class="sticker" data-id="${id}" src="${stickerSrc(id)}" style="left:${p.x}%;top:${p.y}%;width:${p.w}%" alt="" draggable="false">`;
+    }).join('');
+  }
   function renderTabs() {
-    $('#tabs').innerHTML = KINDS.map(([k, n]) => `<button class="tab ${k === tab ? 'active' : ''}" data-k="${k}">${n}</button>`).join('');
+    $('#tabs').innerHTML = kinds().map(([k, n]) => `<button class="tab ${k === tab ? 'active' : ''}" data-k="${k}">${n}</button>`).join('');
   }
   function renderItems() {
     const el = $('#items');
@@ -255,6 +270,11 @@
           <span class="nm">${locked ? '？？？' : o.name}</span><span class="en">${locked ? 'LOCKED' : (o.en || '')}</span>
         </button>`;
       }).join('');
+    } else if (tab === 'acc') {
+      el.innerHTML = `<button class="card acc-card ${state.acc.length ? '' : 'active'}" data-id="__none"><span class="none-mark">✕</span><span class="nm">不带</span><span class="en">NONE</span></button>` +
+        accList().map(a => `<button class="card acc-card ${state.acc.includes(a.id) ? 'active' : ''}" data-id="${a.id}">
+          ${state.acc.includes(a.id) ? '<span class="tick">✓</span>' : ''}<img src="${stickerSrc(a.id)}" alt="" loading="lazy" decoding="async">
+          <span class="nm">${a.name}</span><span class="en">${a.en || ''}</span></button>`).join('');
     } else {
       el.innerHTML = DATA.bg.map(b => `<button class="scene ${state.bg === b.id ? 'active' : ''}" data-id="${b.id}">
         <i style="background-image:${b.img ? `url(${asset(`assets/thumb/${b.img}.jpg`)})` : 'linear-gradient(160deg,#5a3f4a,#3a2a36)'}"></i><span>${b.name}</span></button>`).join('');
@@ -275,6 +295,15 @@
       state.bg = (item.set && item.set.bg) || state.bg;
       if (!item.hidden) tried.add(id); store.set('tried', [...tried]);
       state.outfit = id; render(true); caption(item);
+    } else if (kind === 'acc') {
+      if (id === '__none') { state.acc = []; toast('摘掉了所有配饰', 1600); }
+      else {
+        const on = state.acc.includes(id);
+        state.acc = on ? state.acc.filter(x => x !== id) : [...state.acc, id];
+        const a = byId('acc', id); toast(on ? `摘下 ${a.name}` : (a.line || `戴上 ${a.name}`), 2000);
+        if (!on) { const r = $('#lookBox').getBoundingClientRect(), s = $('#stage').getBoundingClientRect(); const p = a.pos || { x: 50, y: 50 }; FX.burst(r.left - s.left + r.width * p.x / 100, r.top - s.top + r.height * p.y / 100, 16); }
+      }
+      renderStickers(); store.set('state', state);
     } else {
       state.bg = id; render(false); toast(item.line, 2200);
     }
@@ -291,6 +320,7 @@
     const r = arr => arr[Math.floor(Math.random() * arr.length)];
     const pool = DATA.outfit.filter(o => (!o.hidden || unlocked) && o.id !== state.outfit);
     const o = r(pool); state.outfit = o.id; state.bg = r(DATA.bg).id;
+    const accs = accList(); state.acc = accs.length && Math.random() < .6 ? [r(accs).id] : [];
     if (!o.hidden) tried.add(o.id); store.set('tried', [...tried]);
     render(true); caption(o); renderItems(); checkUnlock();
     toast(r(['衣柜摇了摇，掉出来这套。', '这套……好像也不错？', '换个风格试试。']), 2000);
@@ -353,6 +383,13 @@
     for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + spacing; }
     ctx.textAlign = 'center';
   }
+  async function drawStickers(ctx, x, y, w, h) {
+    for (const id of state.acc) {
+      const a = (DATA.acc || []).find(s => s.id === id); if (!a || !stickers[id]) continue;
+      const p = a.pos || { x: 50, y: 50, w: 30 };
+      try { const im = await loadImg(stickerSrc(id)); const sw = w * p.w / 100, sh = sw * im.height / im.width; ctx.drawImage(im, x + w * p.x / 100 - sw / 2, y + h * p.y / 100 - sh / 2, sw, sh); } catch (e) { }
+    }
+  }
   async function drawScene(ctx, Wp, Hp, bg, alpha) {
     if (bg.img) {
       try {
@@ -382,7 +419,7 @@
       ctx.fillStyle = P.title; ctx.font = `500 200px ${FONT_SERIF}`; spaced(ctx, DATA.name, Wp / 2, 300, 30);
       ctx.fillStyle = P.sub; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, 'DRESS-UP ROOM  ·  ÉDITION PRIVÉE', Wp / 2, 352, 6);
       // 人物
-      if (look) { const h = 1160, w = h * 2 / 3; ctx.save(); ctx.shadowColor = P.shadow; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26; ctx.drawImage(look, (Wp - w) / 2, 1425 - h, w, h); ctx.restore(); }
+      if (look) { const h = 1160, w = h * 2 / 3; ctx.save(); ctx.shadowColor = P.shadow; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26; ctx.drawImage(look, (Wp - w) / 2, 1425 - h, w, h); ctx.restore(); await drawStickers(ctx, (Wp - w) / 2, 1425 - h, w, h); }
       // 侧边竖排
       ctx.save(); ctx.translate(74, 760); ctx.rotate(-Math.PI / 2); ctx.fillStyle = P.side; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `VOL. ${String(idx).padStart(2, '0')}   ${(o.en || '').toUpperCase()}`, 0, 0, 5); ctx.restore();
       ctx.save(); ctx.translate(1016, 760); ctx.rotate(Math.PI / 2); ctx.fillStyle = P.side; ctx.font = `500 26px ${FONT_SANS}`; spaced(ctx, `衣柜试穿  ${Math.min(tried.size, total)} / ${total}`, 0, 0, 6); ctx.restore();
@@ -399,7 +436,7 @@
       ctx.fillStyle = '#2a1e28'; ctx.fillRect(70, 70, 940, 1100);
       await drawScene(ctx, Wp, Hp, bg, .9);
       const g = ctx.createLinearGradient(0, 70, 0, 1170); g.addColorStop(0, 'rgba(20,12,18,.1)'); g.addColorStop(1, 'rgba(20,12,18,.35)'); ctx.fillStyle = g; ctx.fillRect(70, 70, 940, 1100);
-      if (look) { const h = 1040, w = h * 2 / 3; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 20; ctx.drawImage(look, (Wp - w) / 2, 1170 - 20 - h, w, h); ctx.restore(); }
+      if (look) { const h = 1040, w = h * 2 / 3; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 20; ctx.drawImage(look, (Wp - w) / 2, 1170 - 20 - h, w, h); ctx.restore(); await drawStickers(ctx, (Wp - w) / 2, 1170 - 20 - h, w, h); }
       ctx.restore();
       ctx.textAlign = 'center'; ctx.fillStyle = '#4a3a3e'; ctx.font = `500 52px ${FONT_SERIF}`; spaced(ctx, o.name, Wp / 2, 1262, 10);
       ctx.fillStyle = '#8a7a7e'; ctx.font = `400 28px ${FONT_SANS}`; ctx.fillText(o.line, Wp / 2, 1318);
@@ -443,9 +480,18 @@
   cmp.addEventListener('pointerdown', e => { cmpDown = true; cmp.setPointerCapture(e.pointerId); cmpMove(e); });
   cmp.addEventListener('pointermove', e => { if (cmpDown) cmpMove(e); });
   cmp.addEventListener('pointerup', () => cmpDown = false); cmp.addEventListener('pointercancel', () => cmpDown = false);
+  // 调位模式（链接加 ?debug=1）：拖动贴纸、滚轮缩放，位置打印在气泡和控制台，抄回 data.js 的 pos
+  if (DEBUG) {
+    document.body.classList.add('debug'); let drag = null;
+    const wrap = $('#stickers');
+    wrap.addEventListener('pointerdown', e => { const s = e.target.closest('.sticker'); if (!s) return; drag = { el: s, id: s.dataset.id, box: $('#lookBox').getBoundingClientRect() }; s.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
+    wrap.addEventListener('pointermove', e => { if (!drag) return; const a = byId('acc', drag.id); a.pos.x = +((e.clientX - drag.box.left) / drag.box.width * 100).toFixed(1); a.pos.y = +((e.clientY - drag.box.top) / drag.box.height * 100).toFixed(1); drag.el.style.left = a.pos.x + '%'; drag.el.style.top = a.pos.y + '%'; });
+    wrap.addEventListener('pointerup', () => { if (!drag) return; const a = byId('acc', drag.id); toast(`${a.id}: ${JSON.stringify(a.pos)}`, 4000); console.log('pos', a.id, JSON.stringify(a.pos)); drag = null; });
+    wrap.addEventListener('wheel', e => { const s = e.target.closest('.sticker'); if (!s) return; e.preventDefault(); const a = byId('acc', s.dataset.id); a.pos.w = +Math.max(3, a.pos.w - Math.sign(e.deltaY)).toFixed(1); s.style.width = a.pos.w + '%'; toast(`${a.id}: ${JSON.stringify(a.pos)}`, 4000); console.log('pos', a.id, JSON.stringify(a.pos)); }, { passive: false });
+  }
   // 舞台：视差 + 点人物撒花
   const stage = $('#stage'); let down = null;
-  stage.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+  stage.addEventListener('pointerdown', e => { if (e.target.closest('button') || (DEBUG && e.target.closest('.sticker'))) return; down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
   stage.addEventListener('pointermove', e => {
     if (!down && e.pointerType === 'touch') return;
     const r = stage.getBoundingClientRect();
@@ -500,5 +546,8 @@
     ASSETS.ext = webp ? 'webp' : 'png'; ASSETS.base = base;
     const ci = $('#closetImg'); if (ci) ci.src = thumbSrc('base'); // 开场页可能已经被点掉了
     renderItems(); render(false);
+    // 探测配饰贴纸是否存在，有的话出现"配饰"标签
+    await Promise.all((DATA.acc || []).map(a => probe(stickerSrc(a.id)).then(ok => stickers[a.id] = ok)));
+    if (accList().length) { renderTabs(); renderStickers(); if (tab === 'acc') renderItems(); }
   })();
 })();

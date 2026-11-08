@@ -23,5 +23,6 @@ for f in assets/looks/*.png(.N); do sips -Z 360 "$f" --out "assets/looks-thumb/$
 for f in assets/looks/*.png(.N) assets/looks-thumb/*.png(.N); do ./tools/bleed "$f" "$f" >/dev/null; done
 for f in assets/looks/*.png(.N); do cwebp -quiet -q 85 -alpha_q 100 -exact -sharp_yuv -m 6 "$f" -o "${f%.png}.webp"; done
 for f in assets/looks-thumb/*.png(.N); do cwebp -quiet -q 82 -alpha_q 100 -exact -sharp_yuv -m 6 "$f" -o "${f%.png}.webp"; done
+for f in assets/stickers/*.png(.N); do ./tools/bleed "$f" "$f" >/dev/null; cwebp -quiet -q 85 -alpha_q 100 -exact -sharp_yuv -m 6 "$f" -o "${f%.png}.webp"; done
 rm -rf "$TMP"
 echo "完成：$(ls assets/looks | wc -l | tr -d ' ') 张立绘，$(ls assets/stickers | wc -l | tr -d ' ') 张贴纸"

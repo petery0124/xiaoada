@@ -14,6 +14,12 @@ window.DATA = {
     { id: 'lilac', name: '淡紫吊带裙', en: 'Lilac Satin', line: '烛光、花串、一杯橙色的饮料，氛围感满分。', photo: 'lilac', set: { bg: 'restaurant' } },
     { id: 'birthday', name: '生日限定', en: 'Birthday Edition', hidden: true, line: '生日那天的你。愿往后每一年，都有花、有蛋糕、有人记得。', photo: 'birthday', set: { bg: 'birthday' } },
   ],
+  // 配饰贴纸：图放在 收图/贴纸/<id>.png（透明底或白底都行），跑 tools/prepare.sh 后生效
+  // pos 是相对人物图框的百分比：x、y 是贴纸中心，w 是宽度。链接后加 ?debug=1 可以拖动、滚轮缩放来校准
+  // 参考位置：头顶 5%，头宽 17%（x 41~58），脖子 24%，手掌 53%（左手 x29 / 右手 x70），腰 36%，脚底 97%
+  acc: [
+    // { id: 'catears', name: '猫耳发箍', line: '灵魂配件，没有之一。', pos: { x: 49.5, y: 7.5, w: 22 } },
+  ],
   // fx：这个场景里飘的东西  tone：场景的主色调，用来打光
   bg: [
     { id: 'pinkroom', name: '粉色小屋', img: 'lolita', fx: 'petals', tone: '#f6b9c9', line: '最熟悉的镜子前。' },
